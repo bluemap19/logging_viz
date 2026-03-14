@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding='utf-8'?>
+<LogAliasMapping>
+  <LogType name="depth">
+    <Alias>#Depth</Alias>
+    <Alias>Depth</Alias>
+    <Alias>DEPTH</Alias>
+    <Alias>depth</Alias>
+  </LogType>
+  <LogType name="CAL">
+    <Alias>CAL</Alias>
+    <Alias>CALC</Alias>
+    <Alias>CALX</Alias>
+    <Alias>CALY</Alias>
+  </LogType>
+  <LogType name="SP">
+    <Alias>SP</Alias>
+    <Alias>Sp</Alias>
+  </LogType>
+  <LogType name="GR">
+    <Alias>GR</Alias>
+    <Alias>GRC</Alias>
+  </LogType>
+  <LogType name="CNL">
+    <Alias>CNL</Alias>
+    <Alias>CN</Alias>
+  </LogType>
+  <LogType name="DEN">
+    <Alias>DEN</Alias>
+    <Alias>DENC</Alias>
+  </LogType>
+  <LogType name="DT">
+    <Alias>DT</Alias>
+    <Alias>DT24</Alias>
+    <Alias>DTC</Alias>
+    <Alias>AC</Alias>
+    <Alias>Ac</Alias>
+  </LogType>
+  <LogType name="RXO">
+    <Alias>RXO</Alias>
+    <Alias>Rxo</Alias>
+    <Alias>RXo</Alias>
+    <Alias>RS</Alias>
+    <Alias>Rs</Alias>
+  </LogType>
+  <LogType name="RD">
+    <Alias>RD</Alias>
+    <Alias>Rd</Alias>
+    <Alias>Rt</Alias>
+    <Alias>RT</Alias>
+  </LogType>
+</LogAliasMapping>
