@@ -290,7 +290,7 @@ plt.rcParams['axes.unicode_minus'] = False
 ## 👥 作者与维护者
 
 - **Author:** Fuhao Zhang
-- **Email:** [你的邮箱]
+- **Email:** zhangfuhao19971002@163.com
 - **Research Area:** Well Logging Engineering, Geological Engineering, Deep Learning, Image Processing
 
 ---
