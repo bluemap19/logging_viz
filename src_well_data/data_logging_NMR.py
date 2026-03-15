@@ -1,13 +1,9 @@
 import os
 import numpy as np
 import pandas as pd
-from src_data_process.cal_data_glcm_texture import cal_images_texture
 import logging
 from typing import Optional, List, Dict, Tuple
 from enum import Enum
-
-from src_fmi.fmi_fractal_dimension_extended_calculate import  trans_NMR_as_Ciflog_file_type
-from src_plot.TEMP_9 import WellLogVisualizer
 
 # 完整显示describe的全部信息不省略
 #set_option函数可以解决数据显示不全问题，比如自动换行、显示……这种，本题不设置就会报错
@@ -346,23 +342,6 @@ def user_specific_test():
         summary = test_NMR.get_summary()
         for key, value in summary.items():
             print(f"  {key}: {value}")
-
-        visualizer = WellLogVisualizer()
-        # 执行可视化
-        visualizer.visualize(
-            logging_dict=None,
-            NMR_dict=[NMR_DICT],
-            NMR_CONFIG={'X_LOG': [True, True],
-                        'NMR_TITLE': ['α-fα-DYNA', 'α-fα-STAT'],
-                        'X_LIMIT': [[0, 6.4], [0, 6.4]],
-                        'Y_scaling_factor': 4},
-            # depth_limit_config=[320, 380],                      # 深度限制
-            figsize=(12, 10)  # 图形尺寸
-        )
-
-        # 显示性能统计
-        stats = visualizer.get_performance_stats()
-        print("性能统计:", stats)
 
     except FileNotFoundError:
         print(f"文件不存在: {test_case['path_nmr']}")

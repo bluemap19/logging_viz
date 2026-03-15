@@ -1,10 +1,8 @@
 import logging
 import os
-
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Any, Optional, Tuple, Union
-
 from src_data_process.data_correction_analysis import feature_influence_analysis
 from src_data_process.data_depth_delete import process_depth_segment
 from src_data_process.data_dilute import dilute_dataframe
@@ -12,12 +10,11 @@ from src_data_process.data_linear_regression import calculate_predictions
 from src_data_process.data_linear_regression_2 import MultiVariateLinearRegressor
 from src_file_op.dir_operation import search_files_by_criteria
 from src_logging.logging_combine import data_combine_table2col
-from src_plot.TEMP_9 import WellLogVisualizer
 from src_plot.plot_matrxi_scatter import plot_matrxi_scatter
-from src_well_data_base.data_logging_FMI import DataFMI
-from src_well_data_base.data_logging_normal import DataLogging
-from src_well_data_base.data_logging_table import DataTable
-from src_well_data_base.data_logging_NMR import DataNMR
+from src_well_data.data_logging_FMI import DataFMI
+from src_well_data.data_logging_normal import DataLogging
+from src_well_data.data_logging_table import DataTable
+from src_well_data.data_logging_NMR import DataNMR
 
 class DATA_WELL:
     """
@@ -239,6 +236,7 @@ class DATA_WELL:
         """获得 FMI 电成像数据的纹理数据，这个获取的是动静态成像的纹理特征"""
         # 计算保存全部纹理数据的路径
         path_texture_all = self.get_path_texture_all(texture_config)
+
         # 如果存在则直接进行计算并保存
         if os.path.exists(path_texture_all):
             print('纹理文件已存在，直接进行读取', path_texture_all)
@@ -337,7 +335,6 @@ class DATA_WELL:
         df_log = df_log.sort_values(depth_col)
         df_tab = df_tab.sort_values(df_tab.columns[0])
 
-
         logging_columns = list(df_log.columns)
         table_columns = list(df_tab.columns)
         array_logging = df_log.values.astype(np.float32)
@@ -419,15 +416,16 @@ if __name__ == '__main__':
     logging_data_temp = well.get_logging()
     print(logging_data_temp.describe())
 
-    # path_list_fmi = well.get_path_list_fmi()
-    # print(path_list_fmi)
-    # path_list_logging = well.get_path_list_logging()
-    # print(path_list_logging)
+    path_list_fmi = well.get_path_list_fmi()
+    print(path_list_fmi)
+
+    path_list_logging = well.get_path_list_logging()
+    print(path_list_logging)
 
     path_logging_target = well.search_logging_path_list(new_kw=['120', 'TEXTURE', 'logging'])
     print(path_logging_target)
-    # path_table_target = well.search_table_path_list(new_kw=['table'])
-    # print(path_table_target)
+    path_table_target = well.search_table_path_list(new_kw=['table'])
+    print(path_table_target)
     path_fmi_dyna_target = well.search_fmi_path_list(new_kw=["DYNA"])
     print(path_fmi_dyna_target)
     path_fmi_stat_target = well.search_fmi_path_list(new_kw=['STAT'])
@@ -466,7 +464,6 @@ if __name__ == '__main__':
     # # input_cols = ['AC', 'CAL', 'CNL', 'DEN', 'DTS', 'GR', 'RT', 'RXO']
     # # input_cols = ['CON_MEAN_STAT', 'DIS_MEAN_STAT', 'HOM_MEAN_STAT', 'ENG_MEAN_STAT', 'COR_MEAN_STAT', 'ASM_MEAN_STAT', 'ENT_MEAN_STAT', 'CON_SUB_STAT', 'DIS_SUB_STAT', 'HOM_SUB_STAT', 'ENG_SUB_STAT', 'COR_SUB_STAT', 'ASM_SUB_STAT', 'ENT_SUB_STAT', 'CON_X_STAT', 'DIS_X_STAT', 'HOM_X_STAT', 'ENG_X_STAT', 'COR_X_STAT', 'ASM_X_STAT', 'ENT_X_STAT', 'CON_Y_STAT', 'DIS_Y_STAT', 'HOM_Y_STAT', 'ENG_Y_STAT', 'COR_Y_STAT', 'ASM_Y_STAT', 'ENT_Y_STAT']
     # # input_cols = ['COR_MEAN_STAT', 'COR_Y_STAT', 'ASM_SUB_STAT', 'HOM_SUB_STAT', 'COR_X_STAT', 'ENG_SUB_STAT', 'ENT_SUB_STAT', 'HOM_X_STAT']
-    #
     # # input_cols = ['CON_MEAN_DYNA', 'DIS_MEAN_DYNA', 'HOM_MEAN_DYNA', 'ENG_MEAN_DYNA', 'COR_MEAN_DYNA', 'ASM_MEAN_DYNA', 'ENT_MEAN_DYNA', 'CON_SUB_DYNA', 'DIS_SUB_DYNA', 'HOM_SUB_DYNA', 'ENG_SUB_DYNA', 'COR_SUB_DYNA', 'ASM_SUB_DYNA', 'ENT_SUB_DYNA', 'CON_X_DYNA', 'DIS_X_DYNA', 'HOM_X_DYNA', 'ENG_X_DYNA', 'COR_X_DYNA', 'ASM_X_DYNA', 'ENT_X_DYNA', 'CON_Y_DYNA', 'DIS_Y_DYNA', 'HOM_Y_DYNA', 'ENG_Y_DYNA', 'COR_Y_DYNA', 'ASM_Y_DYNA', 'ENT_Y_DYNA']
     # # input_cols = ['ENT_SUB_DYNA', 'HOM_X_DYNA', 'ENG_SUB_DYNA', 'HOM_SUB_DYNA', 'ASM_SUB_DYNA', 'CON_SUB_DYNA', 'CON_X_DYNA', 'DIS_SUB_DYNA']
     input_cols = ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'TEXTURE_LEVEL']
@@ -483,6 +480,7 @@ if __name__ == '__main__':
     # print(list(logging_data_temp_type.columns))
     # print(logging_data_temp_type.describe())
     logging_data_temp_type = well.get_logging(key=path_logging_target[0], curve_names=input_cols)
+    print('form path {} read data :{}'.format(path_logging_target[0], logging_data_temp_type.columns))
 
     # 创建模型实例
     model = MultiVariateLinearRegressor(fit_intercept=True)
@@ -493,7 +491,7 @@ if __name__ == '__main__':
     print('intercept_matrix is :', intercept_matrix.shape, 'coef_matrix is :', coef_matrix.shape)
     model.set_fit_paras(x_cols=['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT'], y_cols=['Type'], intercept_matrix=intercept_matrix, coef_matrix=coef_matrix)
     ############## 进行预测
-    logging_data_temp_type['TEXTURE_LEVEL'] = model.predict(logging_data_temp_type)
+    logging_data_temp_type.loc[:, 'TEXTURE_LEVEL'] = model.predict(logging_data_temp_type)
 
     def classify_texture(value):
         if value < 1.0:
@@ -506,73 +504,28 @@ if __name__ == '__main__':
             return 3
     logging_data_temp_type['TYPE_PRED'] = logging_data_temp_type['TEXTURE_LEVEL'].apply(classify_texture)
 
-    logging_data_temp_type.to_csv(well.well_path+'\\'+well.WELL_NAME+'_result.csv', index=False)
+    # logging_data_temp_type.to_csv(well.well_path+'\\'+well.WELL_NAME+'_result.csv', index=False)
 
     # ############## 计算评估指标
     # test_metrics = model.score(logging_data_temp_type)
     # print(type(model.coef_matrix), type(model.intercept_matrix), model.coef_matrix.shape, model.intercept_matrix.shape, model.coef_matrix, model.intercept_matrix)
 
-    # # pearson_result, pearson_sorted, rf_result, rf_sorted = feature_influence_analysis(
-    # #     df_input=logging_data_temp_type,
-    # #     input_cols=input_cols,
-    # #     target_col=target_col,
-    # #     regressor_use=False,
-    # #     replace_dict={},
-    # # )
-    # # print("\n按皮尔逊系数排序的属性:", pearson_sorted)
-    # # print("\n按随机森林特征重要性排序的属性:", rf_sorted)
-    #
-    # # # 按组抽稀，每个组保留50%的数据
-    # # logging_data_dilute = dilute_dataframe(logging_data_temp_type, ratio=5, method='random', group_by=target_col)
-    # # print(f"按组抽稀50%后形状: {logging_data_dilute.shape}")
-    # # plot_matrxi_scatter(logging_data_dilute, ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'CON_X_DYNA', 'CON_SUB_DYNA', 'COR_MEAN_STAT'], target_col, target_col_dict={})
+    # pearson_result, pearson_sorted, rf_result, rf_sorted = feature_influence_analysis(
+    #     df_input=logging_data_temp_type,
+    #     input_cols=input_cols,
+    #     target_col=target_col,
+    #     regressor_use=False,
+    #     replace_dict={},
+    # )
+    # print("\n按皮尔逊系数排序的属性:", pearson_sorted)
+    # print("\n按随机森林特征重要性排序的属性:", rf_sorted)
+
+    # # 按组抽稀，每个组保留50%的数据
+    # logging_data_dilute = dilute_dataframe(logging_data_temp_type, ratio=5, method='random', group_by=target_col)
+    # print(f"按组抽稀50%后形状: {logging_data_dilute.shape}")
+    # plot_matrxi_scatter(logging_data_dilute, ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'CON_X_DYNA', 'CON_SUB_DYNA', 'COR_MEAN_STAT'], target_col, target_col_dict={})
 
     depth_config = [logging_data_temp_type['DEPTH'].min(), logging_data_temp_type['DEPTH'].max()]
     fmi_dynamic, depth_dyna = well.get_FMI(key=path_fmi_dyna_target[0], depth=depth_config)
     fmi_static, depth_stat = well.get_FMI(key=path_fmi_stat_target[0], depth=depth_config)
-
-    # 使用类接口进行可视化
-    print("创建可视化器...")
-    visualizer = WellLogVisualizer()
-    try:
-        # 启用详细日志级别
-        logging.getLogger().setLevel(logging.INFO)
-
-        # 执行可视化
-        visualizer.visualize(
-            logging_dict={'data': logging_data_temp_type,
-                          'depth_col': 'DEPTH',
-                          'curve_cols': ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'TEXTURE_LEVEL'],  # 选择显示的曲线
-                          # 'type_cols': ['Type', 'TYPE_PRED'],  # 分类数据
-                          'type_cols': ['TYPE_PRED'],  # 分类数据
-                          'legend_dict': {0: '不发育', 1: '欠发育', 2: '较发育', 3: '发育'}  # 图例定义
-                          },
-            fmi_dict={  # FMI图像数据
-                'depth': depth_dyna,
-                'image_data': [fmi_dynamic, fmi_static],
-                'title': ['FMI动态', 'FMI静态']
-            },
-            # # NMR_dict=[NMR_DICT1, NMR_DICT2],
-            # NMR_dict={  # NMR数据
-            #     'depth': depth_fmi,
-            #     'nmr_data': [fmi_dynamic, fmi_static],
-            #     'title': ['NMR动态', 'NMR静态']
-            # },
-            # NMR_CONFIG={'X_LOG': [False, True], 'NMR_TITLE': ['N1_谱', 'N2_谱'], 'X_LIMIT': [[1, 1000], [1, 1000]],
-            #             'Y_scaling_factor': 12, 'JUMP_POINT': 15},
-            # depth_limit_config=[320, 380],  # 深度限制
-            figsize=(14, 12)  # 图形尺寸
-        )
-
-        # 显示性能统计
-        stats = visualizer.get_performance_stats()
-        print("性能统计:", stats)
-
-    except Exception as e:
-        print(f"可视化过程中出现错误: {e}")
-        import traceback
-
-        traceback.print_exc()  # 打印完整错误堆栈
-    finally:
-        # 清理资源
-        visualizer.close()
+    print('fmi depth from {} to {}, and fmi data shape is :{}'.format(depth_dyna[0,], depth_dyna[-1], fmi_static.shape))

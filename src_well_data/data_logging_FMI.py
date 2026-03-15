@@ -11,7 +11,6 @@ from enum import Enum
 
 from src_fmi.fmi_fractal_dimension_extended_calculate import cal_fmis_fractal_dimension_extended, \
     trans_NMR_as_Ciflog_file_type, trans_fde_image_to_NMR_type
-from src_plot.TEMP_8 import WellLogVisualizer
 
 # 完整显示describe的全部信息不省略
 #set_option函数可以解决数据显示不全问题，比如自动换行、显示……这种，本题不设置就会报错
@@ -634,10 +633,11 @@ def user_specific_test():
 
     # 用户提供的测试用例
     test_case = {
-        # 'path_fmi': r'F:\logging_workspace\桃镇1H\桃镇1H_STAT_FULL.txt',
+        'path_fmi': r'F:\logging_workspace\桃镇1H\桃镇1H_STAT_FULL.txt',
         # 'path_fmi': r'F:\logging_workspace\禄探\禄探_STAT.txt',
-        'path_fmi': r'C:\Users\purem\Desktop\logging_workspace\禄探\禄探_STAT.txt',
-        'fmi_charter': 'STAT'
+        # 'path_fmi': r'C:\Users\purem\Desktop\logging_workspace\禄探\禄探_STAT.txt',
+        # 'fmi_charter': 'STAT',
+        'fmi_charter': 'DYNA',
     }
 
     print(f"测试文件: {test_case['path_fmi']}")
@@ -681,30 +681,9 @@ def user_specific_test():
         )
         print(FMI_TEXTURE.describe())
 
-        # FMI_FDE = test_FMI.get_fmi_fde()
-        # print(FMI_FDE.shape)
-        #
-        # FMI_FDE_DICT = trans_fde_image_to_NMR_type(FMI_FDE)
-        #
-        # visualizer = WellLogVisualizer()
-        # # 执行可视化
-        # visualizer.visualize(
-        #     logging_dict=None,
-        #     fmi_dict={  # FMI图像数据
-        #         'depth': test_FMI._data_depth,
-        #         'image_data': [test_FMI._data_fmi] ,
-        #         'title': ['FMI动态', 'FMI静态', 'DYNA_PRO', 'STAT_PRO']
-        #     },
-        #     NMR_dict=[FMI_FDE_DICT],
-        #     NMR_Config={'X_LOG': [False, False], 'NMR_TITLE': ['α-fα-DYNA', 'α-fα-STAT'],
-        #                 'X_LIMIT': [[0, 6.4], [0, 6.4]], 'Y_scaling_factor': 4},
-        #     # depth_limit_config=[320, 380],                      # 深度限制
-        #     figsize=(12, 10)  # 图形尺寸
-        # )
-        #
-        # # 显示性能统计
-        # stats = visualizer.get_performance_stats()
-        # print("性能统计:", stats)
+        FMI_FDE = test_FMI.get_fmi_fde()
+        print('current fmi fde shape is:{}'.format(FMI_FDE.shape))
+
 
     except FileNotFoundError:
         print(f"文件不存在: {test_case['path_fmi']}")
@@ -716,24 +695,23 @@ def user_specific_test():
 
 
 if __name__ == '__main__':
-    # """
-    # 主程序入口
-    # 执行顺序：
-    # 1. 综合测试（使用模拟数据）
-    # 2. 用户特定测试（使用用户提供的文件路径）
-    # """
-    #
-    # # 设置日志级别
-    # logging.basicConfig(level=logging.INFO)
-    #
-    # # 执行用户特定测试
-    # user_specific_test()
-    #
-    # print("\n" + "=" * 60)
-    # print("所有测试完成！")
-    # print("=" * 60)
+    """
+    主程序入口
+    执行顺序：
+    1. 综合测试（使用模拟数据）
+    2. 用户特定测试（使用用户提供的文件路径）
+    """
+    # 设置日志级别
+    logging.basicConfig(level=logging.INFO)
 
-    data_fmi_test = DataFMI(path_fmi=r'C:\Users\Maple\Desktop\1-15\Step1\3728.2-3729.2.bmp')
-    data_fmi_test.read_data()
-    print(data_fmi_test.get_summary())
+    # 执行用户特定测试
+    user_specific_test()
+
+    print("\n" + "=" * 60)
+    print("所有测试完成！")
+    print("=" * 60)
+
+    # data_fmi_test = DataFMI(path_fmi=r'C:\Users\Maple\Desktop\1-15\Step1\3728.2-3729.2.bmp')
+    # data_fmi_test.read_data()
+    # print(data_fmi_test.get_summary())
 

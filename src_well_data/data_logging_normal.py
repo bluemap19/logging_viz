@@ -101,6 +101,7 @@ class DataLogging:
             self._logger.info(f"成功加载曲线名称映射配置，包含{len(self.mapping_dict)}种曲线类型")
         except Exception as e:
             self._logger.error(f"加载映射配置失败: {e}")
+
             # 使用默认映射字典作为fallback
             self.mapping_dict = self._get_default_mapping_dict()
             self._logger.warning("使用默认映射字典作为替代")
@@ -341,8 +342,8 @@ class DataLogging:
 
         Example:
             输入: [' GRC  ', 'cn Log', 'DT-24 ']
-            基本清理: ['GRC', 'cn Log', 'DT-24']
-            删除所有空格: ['GRC', 'cnLog', 'DT-24']
+            基本清理: ['GRC', '_cn Log', 'DT-24']
+            删除所有空格及_开头曲线名对应的_: ['GRC', 'cnLog', 'DT-24']
             转为大写: ['GRC', 'CN LOG', 'DT-24']
         """
         # 确定要处理的数据框
@@ -633,28 +634,10 @@ class DataLogging:
             self._data_normed = pd.DataFrame(data_normed_temp, columns=cols_new_temp)
             self._logger.info("完成数据归一化处理")
 
-        return self._data_normed
-
-        # # 如果归一化数据为零，则初始化归一化数据
-        # if self._data_normed.empty:
-        #     data_target = self.get_data(curve_names)
-        #     cols_new_temp = list(data_target.columns)
-        #     data_normed_temp = data_Normalized(data_target.values, DEPTH_USE=True, logging_range=[-999, 9999],
-        #                                        max_ratio=0.01, local_normalized=False)
-        #     self._data_normed = pd.DataFrame(data_normed_temp, columns=cols_new_temp)
-        # else:
-        #     # 如果 self._data_normed 中含有 curve_names，则直接返回
-        #     if set(curve_names) < set(list(self._data_normed.columns)):
-        #         return self._data_normed[curve_names]
-        #     # 否则的话，重新进行正则化
-        #     else:
-        #         data_target = self.get_data(curve_names)
-        #         cols_new_temp = list(data_target.columns)
-        #         data_normed_temp = data_Normalized(data_target.values, DEPTH_USE=True, logging_range=[-999, 9999],
-        #                                            max_ratio=0.01, local_normalized=False)
-        #         self._data_normed = pd.DataFrame(data_normed_temp, columns=cols_new_temp)
-        #
-        # return self._data_normed
+        if curve_names:
+            return self._data_normed[curve_names]
+        else:
+            return self._data_normed
 
     def get_curve_names(self) -> List[str]:
         """
@@ -720,6 +703,5 @@ if __name__ == '__main__':
         print(f"原始曲线: {test_curves}")
         data_logging = test_data.get_data(curve_names=test_curves)
         print(f"映射后曲线: {data_logging.columns}")
-        # mapped_curves = test_data.input_cols_mapping(test_curves, test_data.get_curve_names())
     except Exception as e:
         print(f"映射测试失败: {e}")

@@ -1,8 +1,6 @@
-import numpy as np
-
-from src_plot.visulization.data_manager import LoggingDataManager
-from src_plot.visulization.data_visulization import WellLogVisualizer
-from src_well_data_base.data_logging_well import DATA_WELL
+from src_plot.well_logging_viz.data_manager import LoggingDataManager
+from src_plot.well_logging_viz.data_visulization import WellLogVisualizer
+from src_well_data.data_logging_well import DATA_WELL
 
 if __name__ == '__main__':
 

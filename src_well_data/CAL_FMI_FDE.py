@@ -1,11 +1,8 @@
 import logging
-
 import numpy as np
 import pandas as pd
-
 from src_fmi.fmi_fractal_dimension_extended_calculate import trans_fde_image_to_NMR_type
-from src_plot.TEMP_9 import WellLogVisualizer
-from src_well_data_base.data_logging_FMI import DataFMI
+from src_well_data.data_logging_FMI import DataFMI
 
 
 def user_specific_test():
@@ -64,29 +61,28 @@ def user_specific_test():
         # print(FMI_FDE_DYNA.shape)
         # FMI_FDE_DICT = trans_fde_image_to_NMR_type(FMI_FDE_DYNA)
 
-        visualizer = WellLogVisualizer()
-        # 执行可视化
-        visualizer.visualize(
-            logging_dict=None,
-            fmi_dict={  # FMI图像数据
-                'depth': test_FMI_DYNA._data_depth,
-                'image_data': [test_FMI_DYNA._data_fmi, test_FMI_STAT._data_fmi],
-                'title': ['FMI动态', 'FMI静态']
-            },
-            NMR_dict={  # NMR数据
-                'depth': FMI_FDE_DYNA[:, 0],
-                'nmr_data': [FMI_FDE_DYNA[:, 1:], FMI_FDE_STAT[:, 1:]],
-                'title': ['NMR动态', 'NMR静态']
-            },
-            NMR_CONFIG={'X_LOG': [False, False], 'NMR_TITLE': ['α-fα-DYNA', 'α-fα-STAT'],
-                        'X_LIMIT': [[0, 6.4], [0, 6.4]], 'Y_scaling_factor': 15, 'JUMP_POINT':10},
-            # depth_limit_config=[320, 380],                      # 深度限制
-            figsize=(12, 10)  # 图形尺寸
-        )
-
-        # 显示性能统计
-        stats = visualizer.get_performance_stats()
-        print("性能统计:", stats)
+        # visualizer = WellLogVisualizer()
+        # # 执行可视化
+        # visualizer.visualize(
+        #     logging_dict=None,
+        #     fmi_dict={  # FMI图像数据
+        #         'depth': test_FMI_DYNA._data_depth,
+        #         'image_data': [test_FMI_DYNA._data_fmi, test_FMI_STAT._data_fmi],
+        #         'title': ['FMI动态', 'FMI静态']
+        #     },
+        #     NMR_dict={  # NMR数据
+        #         'depth': FMI_FDE_DYNA[:, 0],
+        #         'nmr_data': [FMI_FDE_DYNA[:, 1:], FMI_FDE_STAT[:, 1:]],
+        #         'title': ['NMR动态', 'NMR静态']
+        #     },
+        #     NMR_CONFIG={'X_LOG': [False, False], 'NMR_TITLE': ['α-fα-DYNA', 'α-fα-STAT'],
+        #                 'X_LIMIT': [[0, 6.4], [0, 6.4]], 'Y_scaling_factor': 15, 'JUMP_POINT':10},
+        #     # depth_limit_config=[320, 380],                      # 深度限制
+        #     figsize=(12, 10)  # 图形尺寸
+        # )
+        # # 显示性能统计
+        # stats = visualizer.get_performance_stats()
+        # print("性能统计:", stats)
 
     except FileNotFoundError:
         print(f"文件不存在: {test_case_DYNA['path_fmi']}")

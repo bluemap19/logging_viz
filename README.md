@@ -141,8 +141,8 @@ pip install -r requirements.txt
 
 ```python
 from src_well_data.data_logging_well import DATA_WELL
-from src_plot.data_manager import LoggingDataManager
-from src_plot.data_visulization import WellLogVisualizer
+from src_plot.well_logging_viz.data_manager import LoggingDataManager
+from src_plot.well_logging_viz.data_visulization import WellLogVisualizer
 
 # 1. 加载单井数据
 well = DATA_WELL(

@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import pandas as pd
-
 from src_file_op.dir_operation import get_all_file_paths
 from src_fmi.fmi_data_read import get_ele_data_from_path
 from src_fmi.image_operation import get_glcm_sub, show_Pic, get_glcm_xy, get_glcm_Features
@@ -75,21 +74,21 @@ if __name__ == '__main__':
                           (texture_average_dyna.ravel() - RADIA_DYNA_MIN) / (RADIA_DYNA_MAX - RADIA_DYNA_MIN),
                           (texture_sub_dyna.ravel() - RADIA_SUB_DYNA_MIN) / (RADIA_SUB_DYNA_MAX - RADIA_SUB_DYNA_MIN)]
 
-            # attributes = ['CON', 'DIS', 'HOM', 'ENG', 'COR', 'ASM', 'ENT']
-            # # sub_titles = ['MEAN', 'X', 'Y', 'SUB']
-            # sub_titles = ['', '', '', '']
-            # from matplotlib import pyplot as plt
-            # fig2, axes2 = draw_radar_chart(
-            #     data_list=RADAR_LIST,
-            #     radar_str=attributes,
-            #     pic_order='41',
-            #     figure=(5, 24),
-            #     pic_str=sub_titles,
-            #     title='',
-            #     norm=True
-            # )
-            # plt.show()
-            # # exit(0)
+            attributes = ['CON', 'DIS', 'HOM', 'ENG', 'COR', 'ASM', 'ENT']
+            # sub_titles = ['MEAN', 'X', 'Y', 'SUB']
+            sub_titles = ['', '', '', '']
+            from matplotlib import pyplot as plt
+            fig2, axes2 = draw_radar_chart(
+                data_list=RADAR_LIST,
+                radar_str=attributes,
+                pic_order='41',
+                figure=(5, 24),
+                pic_str=sub_titles,
+                title='',
+                norm=True
+            )
+            plt.show()
+            # exit(0)
 
     GLCM_STAT = np.array(GLCM_STAT_LIST)
     GLCM_SUB_STAT = np.array(GLCM_SUB_STAT_LIST)

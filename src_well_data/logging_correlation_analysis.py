@@ -1,5 +1,4 @@
 import pandas as pd
-
 from src_data_process.data_correction_analysis import feature_influence_analysis
 from src_data_process.data_dilute import dilute_dataframe
 from src_data_process.data_distribution_statistics_overview import data_overview
@@ -8,7 +7,7 @@ from src_data_process.data_supervised_evaluation import evaluate_supervised_clus
 from src_logging.logging_combine import combine_logging_data
 from src_plot.plot_matrxi_scatter import plot_matrxi_scatter
 from src_table.table_process import table_2_to_3
-from src_well_data_base.data_logging_well import DATA_WELL
+from src_well_data.data_logging_well import DATA_WELL
 
 if __name__ == '__main__':
     # well = DATA_WELL(r'F:\logging_workspace\SIMU5-Crack-Hole')

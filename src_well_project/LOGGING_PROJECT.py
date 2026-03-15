@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from src_file_op.dir_operation import get_all_subfolder_paths
 from src_table.table_process import get_replace_dict
-from src_well_data.DATA_WELL import DATA_WELL
+from src_well_data.data_logging_well import DATA_WELL
 
 
 class LOGGING_PROJECT:

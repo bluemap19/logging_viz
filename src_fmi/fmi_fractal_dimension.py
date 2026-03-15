@@ -6,7 +6,6 @@ import cv2
 from sklearn.linear_model import LinearRegression
 from src_fmi.image_operation import show_Pic
 from src_logging.logging_interpolation import ConventionalLogInterpolator
-from src_plot.TEMP_4 import WellLogVisualizer
 
 
 def adaptive_binarization(image, method='otsu_adaptive'):
@@ -391,16 +390,6 @@ if __name__ == '__main__':
     data_img_dyna, data_img_stat, data_depth = get_random_ele_data()
     print(f"数据形状: 动态{data_img_dyna.shape}, 静态{data_img_stat.shape}, 深度{data_depth.shape}")
 
-    # # 2. 分形维数计算
-    # df_fd, processed_imgs = cal_fmi_fractal_dimension(
-    #     data_depth,
-    #     data_img_stat,  # 使用静态电成像数据（噪声较小）
-    #     windows_length=100,  # 窗口长度：平衡纵向分辨率和统计可靠性
-    #     windows_step=5,  # 滑动步长：控制计算密度
-    #     method='differential_box',  # 差分盒计数法适合灰度电成像
-    #     # edge_detection adaptive_binary
-    #     processing_method='edge_detection',  # 自适应二值化突出岩性边界
-    # )
     # 2. 分形维数计算
     df_fd, fmi_result = cal_fmis_fractal_dimension(
         fmi_dict={
@@ -420,37 +409,3 @@ if __name__ == '__main__':
     print(f"计算完成，共{len(df_fd)}个数据点")
     print(f"动态分形维数范围: {df_fd['fd_dyna'].min():.4f} - {df_fd['fd_dyna'].max():.4f}")
     print(f"静态分形维数范围: {df_fd['fd_stat'].min():.4f} - {df_fd['fd_stat'].max():.4f}")
-
-    # 4. 可视化展示
-    print("创建可视化器...")
-    visualizer = WellLogVisualizer()
-    try:
-        # 启用详细日志
-        logging.getLogger().setLevel(logging.INFO)
-
-        # 综合可视化：分形维数曲线 + 原始电成像 + 处理结果
-        visualizer.visualize(
-            data=df_fd,
-            depth_col='depth',
-            curve_cols=['fd_dyna', 'fd_stat'],  # 分形维数曲线
-            type_cols=[],  # 岩性分类（可选）
-            fmi_dict={
-                'depth': df_fd.depth.values,
-                'image_data': [data_img_dyna, data_img_stat, fmi_result[0], fmi_result[1]],
-                'title': ['FMI动态', 'FMI静态', '分形预处理结果_DYNA', '分形预处理结果_STAT']
-            },
-            figsize=(12, 8)
-        )
-
-        # 性能统计
-        stats = visualizer.get_performance_stats()
-        print("性能统计:", stats)
-
-    except Exception as e:
-        print(f"可视化过程中出现错误: {e}")
-        import traceback
-
-        traceback.print_exc()
-    finally:
-        # 清理资源
-        visualizer.close()

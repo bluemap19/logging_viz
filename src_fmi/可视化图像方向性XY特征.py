@@ -62,19 +62,19 @@ if __name__ == '__main__':
                           (texture_average.ravel() - RADIA_MIN) / (RADIA_MAX - RADIA_MIN),
                           (texture_sub.ravel() - RADIA_SUB_MIN)/(RADIA_SUB_MAX - RADIA_SUB_MIN)]
             attributes = ['CON', 'DIS', 'HOM', 'ENG', 'COR', 'ASM', 'ENT']
-            # # sub_titles = ['X', 'Y', 'MEAN', 'SUB']
-            # sub_titles = ['', '', '', '', '']
-            # from matplotlib import pyplot as plt
-            # fig2, axes2 = draw_radar_chart(
-            #     data_list=RADAR_LIST,
-            #     radar_str=attributes,
-            #     pic_order='41',
-            #     figure=(5, 26),
-            #     pic_str=sub_titles,
-            #     title='',
-            #     norm=True
-            # )
-            # plt.show()
+            # sub_titles = ['X', 'Y', 'MEAN', 'SUB']
+            sub_titles = ['', '', '', '', '']
+            from matplotlib import pyplot as plt
+            fig2, axes2 = draw_radar_chart(
+                data_list=RADAR_LIST,
+                radar_str=attributes,
+                pic_order='41',
+                figure=(5, 26),
+                pic_str=sub_titles,
+                title='',
+                norm=True
+            )
+            plt.show()
 
 
     GLCM_FEATURE_VS = np.array(GLCM_FEATURE_LIST_VS)
@@ -126,5 +126,5 @@ if __name__ == '__main__':
     Texture_SUB_df['文件名'] = file_names
     Texture_SUB_df['Feature'] = features
 
-    TEXTURE_ALL = pd.concat([Texture_XY_df, Texture_SUB_df], ignore_index=True, axis=0)
-    TEXTURE_ALL.to_csv(path_folder+'\纹理特征-XY-SUB.csv', index=False)
+    # TEXTURE_ALL = pd.concat([Texture_XY_df, Texture_SUB_df], ignore_index=True, axis=0)
+    # TEXTURE_ALL.to_csv(path_folder+'\纹理特征-XY-SUB.csv', index=False)

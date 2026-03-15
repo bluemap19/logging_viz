@@ -9,8 +9,8 @@ def data_combine_table2col(data_main, table_vice, drop=True):
 
     使用KD树进行最近邻搜索，大幅提升合并效率
 
-    :param data_main: 主数据，n行m列的测井数据，第一列为DEPTH列
-    :param table_vice: 表格数据，n*2数组，格式为[depth, Type]
+    :param data_main: 主数据，n行m列的测井数据，第一列为DEPTH列，必须为numpy的矩阵数组
+    :param table_vice: 表格数据，n*2数组，如果大于两列，择取最后一列为分类结果列，格式为[depth, Type]，必须为numpy的矩阵数组
     :param drop: 是否抛弃无匹配的数据
     :return: 合并后的测井数据数组
     """
@@ -107,7 +107,7 @@ def combine_logging_data(
     合并多个测井数据DataFrame
 
     参数:
-    data_main: 主数据DataFrame，包含深度列和其他测井数据
+    data_main: 主数据 DataFrame，包含深度列和其他测井数据
     data_vice: 副数据列表，每个元素是一个DataFrame，包含深度列和其他数据
     depth_col: 深度列名称，默认为'DEPTH'
     drop: 是否丢弃无法匹配的行
@@ -121,6 +121,10 @@ def combine_logging_data(
         raise ValueError("主数据必须是非空的DataFrame")
     if not isinstance(data_vice, list):
         raise TypeError("副数据必须是列表")
+    if len(data_vice) == 0:
+        raise TypeError("副数据不能为空")
+    if not isinstance(data_vice[0], pd.DataFrame):
+        raise TypeError("副数据元素必须为pd.DataFrame")
     if depth_col not in data_main.columns:
         raise ValueError(f"主数据中缺少深度列 '{depth_col}'")
 
@@ -165,7 +169,7 @@ def combine_logging_data(
             df_vice,
             depth_main=depth_col,
             depth_vice=df_vice.columns[0],
-            suffix=f"_vice{i}",
+            suffix=f"_{i}",
             tolerance=tolerance
         )
         # 更新匹配掩码
@@ -185,7 +189,7 @@ def merge_on_depth(
         df_vice: pd.DataFrame,
         depth_main: str = 'DEPTH',
         depth_vice: str = 'DEPTH',
-        suffix: str = "_vice",
+        suffix: str = "_",
         tolerance: float = 0.001
 ) -> tuple:
     """
@@ -265,7 +269,7 @@ def test_combine_logging_data():
     data_vice1 = pd.DataFrame({
         'DEPTH': depth_vice1,
         'SP': np.random.uniform(-10, 10, len(depth_vice1)),
-        'CALI': np.random.uniform(6.0, 16.0, len(depth_vice1))
+        'AC': np.random.uniform(6.0, 16.0, len(depth_vice1))
     })
 
     # 创建副数据2
@@ -273,7 +277,7 @@ def test_combine_logging_data():
     data_vice2 = pd.DataFrame({
         'DEPTH': depth_vice2,
         'CNL': np.random.uniform(0.1, 0.4, len(depth_vice2)),
-        'PE': np.random.uniform(1.0, 5.0, len(depth_vice2))
+        'DEN': np.random.uniform(1.0, 5.0, len(depth_vice2))
     })
 
     # 创建副数据3（有列名冲突）
@@ -281,7 +285,7 @@ def test_combine_logging_data():
     data_vice3 = pd.DataFrame({
         'DEPTH': depth_vice3,
         'GR': np.random.uniform(10, 100, len(depth_vice3)),  # 与主数据列名冲突
-        'AC': np.random.uniform(50, 200, len(depth_vice3))
+        'DEN': np.random.uniform(50, 200, len(depth_vice3))
     })
 
     # 创建副数据4（无效数据）

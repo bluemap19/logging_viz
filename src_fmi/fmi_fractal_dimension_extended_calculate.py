@@ -2,13 +2,11 @@ import logging
 import cv2
 import numpy as np
 from tqdm import trange
-
 from src_fmi.fmi_data_read import get_random_ele_data
 from src_fmi.fmi_fractal_dimension import adaptive_binarization, edge_detection
 from src_fmi.fractal_dimension_extended import cal_pic_fractal_dimension_extended
 from src_fmi.fractal_dimension_gxm import multifractal_analysis
 from src_fmi.image_operation import show_Pic
-from src_plot.TEMP_8 import WellLogVisualizer
 from typing import Dict, Any, Tuple
 
 def pic_preprocess(image, processing_method='adaptive_binary'):
@@ -251,45 +249,13 @@ if __name__ == '__main__':
 
     depth_array, image_fde_dyna = trans_NMR_as_Ciflog_file_type(fmi_multi_fde_list[0])
     alpha_f_dyna = np.hstack((depth_array.reshape((-1, 1)), image_fde_dyna.astype(np.float32)))
-    np.savetxt('alpha_f_dyna.txt', alpha_f_dyna, delimiter='\t', comments='', fmt='%.4f')
+    # np.savetxt('alpha_f_dyna.txt', alpha_f_dyna, delimiter='\t', comments='', fmt='%.4f')
 
     depth_array, image_fde_stat = trans_NMR_as_Ciflog_file_type(fmi_multi_fde_list[1])
     alpha_f_stat = np.hstack((depth_array.reshape((-1, 1)), image_fde_stat.astype(np.float32)))
-    np.savetxt('alpha_f_stat.txt', alpha_f_stat, delimiter='\t', comments='', fmt='%.4f')
+    # np.savetxt('alpha_f_stat.txt', alpha_f_stat, delimiter='\t', comments='', fmt='%.4f')
 
-    # show_Pic([image_fde_dyna, image_fde_stat])
+    print('test dyna shape is :{}, and stat shape is: {}'.format(alpha_f_dyna.shape, alpha_f_stat.shape))
 
-    # 使用类接口进行可视化
-    print("创建可视化器...")
-    visualizer = WellLogVisualizer()
-    try:
-        # 启用详细日志级别
-        logging.getLogger().setLevel(logging.INFO)
 
-        # 执行可视化
-        visualizer.visualize(
-            logging_dict=None,
-            fmi_dict={  # FMI图像数据
-                'depth': data_depth,
-                'image_data': [data_img_dyna, data_img_stat]+fmi_result_list,
-                'title': ['FMI动态', 'FMI静态', 'DYNA_PRO', 'STAT_PRO']
-            },
-            NMR_dict=fmi_multi_fde_list,
-            NMR_Config={'X_LOG': [False, False], 'NMR_TITLE': ['α-fα-DYNA', 'α-fα-STAT'], 'X_LIMIT':[[1.2, 4], [1.2, 4]], 'Y_scaling_factor': 2.4},
-            # depth_limit_config=[320, 380],                      # 深度限制
-            figsize=(12, 10)                                    # 图形尺寸
-        )
-
-        # 显示性能统计
-        stats = visualizer.get_performance_stats()
-        print("性能统计:", stats)
-
-    except Exception as e:
-        print(f"可视化过程中出现错误: {e}")
-        import traceback
-
-        traceback.print_exc()  # 打印完整错误堆栈
-    finally:
-        # 清理资源
-        visualizer.close()
 

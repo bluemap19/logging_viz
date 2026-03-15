@@ -1,13 +1,10 @@
 import logging
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d, CubicSpline, PchipInterpolator
 from sklearn.preprocessing import StandardScaler
 import warnings
-
-from src_plot.TEMP_4 import WellLogVisualizer
 
 
 class ConventionalLogInterpolator:
@@ -383,39 +380,3 @@ if __name__ == "__main__":
 
     print(f"示例完成: {len(df_example)}点 -> {len(df_result)}点")
 
-    # 使用类接口进行可视化
-    print("创建可视化器...")
-    visualizer = WellLogVisualizer()
-    try:
-        # 启用详细日志
-        logging.getLogger().setLevel(logging.INFO)
-
-        visualizer.visualize(
-            data=df_result,
-            depth_col='DEPTH',
-            curve_cols=['GR', 'RT', 'NPHI'],
-            type_cols=[],
-            # type_cols=['LITHOLOGY', 'FACIES'],
-            # legend_dict={
-            #     0: '砂岩',
-            #     1: '页岩',
-            #     2: '石灰岩',
-            #     3: '白云岩'
-            # },
-            fmi_dict=None,
-            # depth_limit_config=[320, 380],  # 只显示320-380米段
-            figsize=(8, 8)
-        )
-
-        # 显示性能统计
-        stats = visualizer.get_performance_stats()
-        print("性能统计:", stats)
-
-    except Exception as e:
-        print(f"可视化过程中出现错误: {e}")
-        import traceback
-
-        traceback.print_exc()
-    finally:
-        # 清理资源
-        visualizer.close()
