@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage
 from src_logging.curve_preprocess import get_resolution_by_depth
-from src_plot.visulization.cache_logging import EnhancedWellLogCache, CacheConfig
-from src_well_data_base.data_logging_well import DATA_WELL
+from src_plot.well_logging_viz.cache_logging import EnhancedWellLogCache, CacheConfig
+from src_well_data.data_logging_well import DATA_WELL
 
 logger = logging.getLogger(__name__)
 

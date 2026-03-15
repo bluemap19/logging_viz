@@ -47,8 +47,8 @@ if __name__ == '__main__':
     print(list(logging_data_type.columns))
     print(logging_data_type.describe())
 
-    # 按组抽稀，每个组保留50%的数据
-    logging_data_dilute = dilute_dataframe(logging_data_type, ratio=20, method='random', group_by=target_col)
+    # 按组抽稀，每个组保留ratio%的数据
+    logging_data_dilute = dilute_dataframe(logging_data_type, ratio=5, method='random', group_by=target_col)
     print(f"按组抽稀50%后形状: {logging_data_dilute.shape}")
     plot_matrxi_scatter(logging_data_dilute, cols_texture[:6], target_col, target_col_dict={0: '层理缝', 1: '高导缝', 2: '高阻缝', 3: '诱导缝', 4: '断层'}, figsize=(14, 12))
 
@@ -59,46 +59,45 @@ if __name__ == '__main__':
         target_col=target_col,
         target_col_dict={0: '层理缝', 1: '高导缝', 2: '高阻缝', 3: '诱导缝', 4: '断层'},
     )
-    # 保存结果
-    result.to_excel('data_overview.xlsx', index=True)
+    # # 保存结果
+    # result.to_excel('data_overview.xlsx', index=True)
 
-    # df_results, trained_classifiers = supervised_classification(
-    #     logging_data_type[cols_texture], logging_data_type[target_col],
-    #     Norm=True,  # 不跳过标准化
-    #     Type_str={'岩相1':0, '岩相2':1, '岩相3':2, '岩相4':3, '岩相5':4},
-    #     y_type_number=5,        # 一共有几类
-    # )
-    #
-    # predictions = model_predict(trained_classifiers, logging_data_type[cols_texture])
-    # print(predictions.describe())
-    #
-    # df_all = pd.concat([logging_data_type, predictions], axis=1)
-    # Type_cols = ['Cracks_Type', 'MLP', 'KNN', 'SVM', 'Naive Bayes', 'Random Forest', 'GBM']
-    # for col in Type_cols:
-    #     df_all[col] = df_all[col].map(replace_dict_inversed)
-    #
-    #     table_2_temp = df_all[['DEPTH', col]]
-    #     table_3_array = table_2_to_3(table_2_temp.values)
-    #     # 将转换结果重新封装为DataFrame
-    #     table_3_temp = pd.DataFrame(table_3_array, columns=['DEPTH_START', 'DEPTH_END', col])
-    #     table_3_temp.to_csv(f'{col}.csv', index=True)
-    #
+    df_results, trained_classifiers = supervised_classification(
+        logging_data_type[cols_texture], logging_data_type[target_col],
+        Norm=True,  # 不跳过标准化
+        Type_str={'岩相1':0, '岩相2':1, '岩相3':2, '岩相4':3, '岩相5':4},
+        y_type_number=5,        # 一共有几类
+    )
+
+    predictions = model_predict(trained_classifiers, logging_data_type[cols_texture])
+    print(predictions.describe())
+
+    df_all = pd.concat([logging_data_type, predictions], axis=1)
+    Type_cols = ['Cracks_Type', 'MLP', 'KNN', 'SVM', 'Naive Bayes', 'Random Forest', 'GBM']
+    for col in Type_cols:
+        df_all[col] = df_all[col].map(replace_dict_inversed)
+
+        table_2_temp = df_all[['DEPTH', col]]
+        table_3_array = table_2_to_3(table_2_temp.values)
+        # 将转换结果重新封装为DataFrame
+        table_3_temp = pd.DataFrame(table_3_array, columns=['DEPTH_START', 'DEPTH_END', col])
+        # table_3_temp.to_csv(f'{col}.csv', index=True)
     # df_all.to_csv(well.well_path+'\\result_all.csv', index=False)
-    #
-    # df_eval = pd.concat([logging_data_type[target_col], predictions], axis=1)
-    # print(df_eval.describe())
-    # print(df_eval.columns)
 
+    df_eval = pd.concat([logging_data_type[target_col], predictions], axis=1)
+    print(df_eval.describe())
+    print(df_eval.columns)
 
-    # result = evaluate_supervised_clustering(
-    #     df=df_eval,
-    #     col_org='Cracks_Type',
-    #     cols_compare=['MLP', 'KNN', 'SVM', 'Naive Bayes', 'Random Forest', 'GBM'],
-    #     save_report=True,  # 设置为True可保存Excel报告
-    #     report_path="test_evaluation.xlsx"
-    # )
-    # for key, value in result.items():
-    #     print(key, result)
+    # 有监督分类结果评价
+    result = evaluate_supervised_clustering(
+        df=df_eval,
+        col_org='Cracks_Type',
+        cols_compare=['MLP', 'KNN', 'SVM', 'Naive Bayes', 'Random Forest', 'GBM'],
+        save_report=True,  # 设置为True可保存Excel报告
+        report_path="test_evaluation.xlsx"
+    )
+    for key, value in result.items():
+        print(key, result)
 
     # pearson_result, pearson_sorted, rf_result, rf_sorted = feature_influence_analysis(
     #     df_input=logging_data_type,
@@ -112,10 +111,10 @@ if __name__ == '__main__':
 
     # logging_texture = well.get_logging(key=path_list_logging[0])
     # logging_paras = well.get_logging(key=path_list_logging[1])
-    #
+
     # print(logging_paras.describe())
     # print(logging_texture.describe())
-    #
+
     # data_all = combine_logging_data(
     #         data_main = logging_paras,
     #         data_vice = [logging_texture],
@@ -123,12 +122,12 @@ if __name__ == '__main__':
     #         drop = True
     # )
     # print(data_all.describe())
-    #
+
     # cols_texture = list(logging_texture.columns)
     # cols_paras = list(logging_paras.columns)
     # print(cols_paras)
     # print(cols_texture)
-    #
+
     # pearson_result, pearson_sorted, rf_result, rf_sorted = feature_influence_analysis(
     #     df_input=data_all,
     #     input_cols=cols_texture[1:],
@@ -159,7 +158,6 @@ if __name__ == '__main__':
     # # # #         'angles': [0, np.pi / 2],  # 角度方向
     # # # #         'windows_length': 80,  # 窗口长度
     # # # #         'windows_step': 10  # 滑动步长
-    # #
     # # # # })
     # # # # texture_stat = well.get_FMI_texture(key='F:\\logging_workspace\\云安012-X18\\云安012-X18-STAT.txt', texture_config = {
     # # # #         'level': 16,  # 灰度级别

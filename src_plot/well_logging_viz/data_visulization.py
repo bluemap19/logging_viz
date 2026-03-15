@@ -8,8 +8,8 @@ from matplotlib.collections import PolyCollection
 from typing import List, Dict, Tuple, Optional, Any, Union
 import time
 import logging
-from src_plot.visulization.data_manager import LoggingDataManager
-from src_well_data_base.data_logging_well import DATA_WELL
+from src_plot.well_logging_viz.data_manager import LoggingDataManager
+from src_well_data.data_logging_well import DATA_WELL
 
 
 class WellLogVisualizer:
@@ -1230,7 +1230,7 @@ if __name__ == '__main__':
 
     config_nmr: Dict[str, Any] = {
         'plot_density': 40,  # 每窗口绘制的密度
-        'plot_amplitude_scaling': 0.2,  # 折线幅度的缩放因子
+        'plot_amplitude_scaling': 0.002,  # 折线幅度的缩放因子
         'x_logarithmic_scale': True,  # x方向是否进行对数刻度
         'color_fill': 'green',  # 折线填充颜色配置
         'nmr_title': ['NMR_1'],
