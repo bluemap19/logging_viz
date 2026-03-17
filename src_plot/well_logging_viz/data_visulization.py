@@ -1131,10 +1131,10 @@ class WellLogVisualizer:
             self.nmr_data_windows = self.data_manager.get_visible_nmr_data(self.depth_position, self.depth_position+self.window_size, nmr_plot_density)
 
             # ========== 图形设置 ==========
-            n_plots = self._calculate_subplot_count()                               # 计算子图总数
-            has_legend = bool(self.config_type['show_legend'])                      # 检查是否有图例
-            self._setup_figure_layout(figure, n_plots, has_legend, figsize)         # 设置布局
-            self._create_window_size_slider(has_legend)  # 创建滑动条
+            n_plots = self._calculate_subplot_count()                                                               # 计算子图总数
+            self.has_legend = bool(self.config_type['show_legend']) and (len(self.config_type['types_cols']) > 0)        # 检查是否有图例
+            self._setup_figure_layout(figure, n_plots, self.has_legend, figsize)                                         # 设置布局
+            self._create_window_size_slider(self.has_legend)  # 创建滑动条
 
             # ========== 优化和绘制 ==========
             self._optimize_fmi_rendering()  # FMI图像优化
@@ -1146,7 +1146,8 @@ class WellLogVisualizer:
             # ========== 交互功能 ==========
             self.window_size_slider.on_changed(self._on_window_size_change)  # 滑动条回调
             self.fig.canvas.mpl_connect('scroll_event', self._on_mouse_scroll)  # 滚轮事件
-            self._create_legend_panel(self.config_type['legend_dict'])  # 创建图例
+            if self.has_legend:
+                self._create_legend_panel(self.config_type['legend_dict'])  # 创建图例
 
             # ========== 初始显示 ==========
             self._update_display()  # 执行首次显示更新

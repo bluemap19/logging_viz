@@ -42,7 +42,8 @@ class LoggingDataManager:
 
         self._validate_logging_data(logging_data)
         self.logging_data = logging_data                # 测井数据输入配置
-        self.depth_col = self.logging_data.columns[0]   # 深度列配置
+        if not self.logging_data.empty:
+            self.depth_col = self.logging_data.columns[0]   # 深度列配置
         self.config_logging = {}                        # 测井数据绘图配置
         self.config_type = {}                           # 分类数据绘图配置
 

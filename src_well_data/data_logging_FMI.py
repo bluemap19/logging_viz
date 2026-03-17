@@ -1,16 +1,16 @@
 import os
 import re
-
 import cv2
 import numpy as np
 import pandas as pd
-from src_data_process.cal_data_glcm_texture import cal_images_texture
+from src_fmi.fmi_data_read import get_ele_data_from_path
+from src_fmi.fmi_glcm_texture import cal_fmis_texture
 import logging
 from typing import Optional, List, Dict, Tuple
 from enum import Enum
-
 from src_fmi.fmi_fractal_dimension_extended_calculate import cal_fmis_fractal_dimension_extended, \
-    trans_NMR_as_Ciflog_file_type, trans_fde_image_to_NMR_type
+    trans_NMR_as_Ciflog_file_type
+from src_fmi.fmi_segmentation import cal_fmis_segmentation
 
 # 完整显示describe的全部信息不省略
 #set_option函数可以解决数据显示不全问题，比如自动换行、显示……这种，本题不设置就会报错
@@ -37,8 +37,7 @@ class FileFormat(Enum):
     IMAGE = '.image'
     UNKNOWN = 'unknown'
 
-def ele_stripes_delete(Pic: np.ndarray, shape_target: Tuple[int, int] = (100, 8),
-                       delete_pix: float = 0) -> np.ndarray:
+def ele_stripes_delete(Pic: np.ndarray, shape_target: Tuple[int, int] = (100, 8), delete_pix: float = 0) -> np.ndarray:
     """
     空白条带删除函数 - 采用多退少补原则处理FMI图像中的无效像素
 
@@ -126,7 +125,6 @@ class DataFMI:
             fmi_charter: FMI仪器标识，用于特征命名区分
 
         Attributes:
-            _table_2: 保留属性，用于与其他数据格式兼容
             _well_name: 井名标识
             _data_fmi: 存储原始FMI成像数据（二维numpy数组）
             _resolution: FMI数据分辨率（深度采样间隔）
@@ -137,7 +135,6 @@ class DataFMI:
             _is_data_loaded: 数据加载状态标志
         """
         # 数据存储属性
-        self._table_2: pd.DataFrame = pd.DataFrame()  # 保留属性，用于兼容性
         self._data_fmi: np.ndarray = np.array([])  # FMI成像数据体
         self._data_depth: np.ndarray = np.array([])  # 深度数据
 
@@ -145,6 +142,7 @@ class DataFMI:
         self._resolution: float = 0.0025  # 默认分辨率
         self._well_name: str = well_name
         self.path_fmi: str = path_fmi
+        self.path_folder: str = os.path.dirname(path_fmi)
         if len(fmi_charter) == 0:
             if path_fmi.upper().__contains__('DYNA'):
                 fmi_charter = 'DYNA'
@@ -165,6 +163,9 @@ class DataFMI:
         # 检查文件是否存在
         if path_fmi and not os.path.isfile(path_fmi):
             self._logger.error(f"文件不存在或无法访问: {path_fmi}")
+
+        # self.__remove_path_extension(self.path_fmi)
+        # exit(0)
 
     def __setup_logger(self) -> logging.Logger:
         """
@@ -277,18 +278,15 @@ class DataFMI:
         except Exception as e:
             raise FMIException(f"CSV文件读取失败: {e}")
 
-    def __remove_path_image_extension(self, filename):
+    def __remove_path_extension(self, filename):
         """
-        如果是图像文件，则移除文件的扩展名，来计算深度数据，如果是txt文件，就不需要这一步操作了
+        移除文件的扩展名，来计算深度数据或者是生成本路径下的各种要保存的文件
         :param filename:
         :return:
         """
         name, ext = os.path.splitext(filename)
-        # 检查是否是图片扩展名
-        if ext.lower() in ['.png', '.jpg', '.jpeg', '.bmp']:
-            return name
-        else:
-            return filename  # 如果不是图片扩展名，返回原文件名
+        ### 结果分别是 F:\logging_workspace\桃镇1H\桃镇1H_DYNA_FULL 与 .txt
+        return name
 
     def __read_img_data(self, file_path: str) -> None:
         """
@@ -304,12 +302,12 @@ class DataFMI:
             elif file_path.endswith('.jpg'):
                 self._data_fmi = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
             elif file_path.endswith('.bmp'):
-                # self._data_fmi = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
-                self._data_fmi = cv2.imread(file_path, cv2.IMREAD_COLOR_RGB)
+                self._data_fmi = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+                # self._data_fmi = cv2.imread(file_path, cv2.IMREAD_COLOR_RGB)
             else:
                 raise FMIException(f"图像文件读取失败{file_path}")
 
-            file_name = self.__remove_path_image_extension(file_path)
+            file_name = self.__remove_path_extension(file_path)
 
             depth_str_list = re.split(r'[/\\_-]', file_name)
             depth_list = []
@@ -416,7 +414,7 @@ class DataFMI:
             self._logger.error(f"空白条带删除失败: {e}")
             raise
 
-    def __get_fmi_texture_path(self):
+    def __get_path_fmi_texture(self):
         """
         初始化texture的保存路径
         :return: str path_texture
@@ -473,11 +471,11 @@ class DataFMI:
         self._logger.info(f"开始纹理特征计算，配置: {texture_config}")
 
         # 生成纹理特征列名
-        texture_headers = self.__generate_texture_headers()
+        texture_headers = self.__generate_headers_texture()
 
         # 生成文件适配的csv文件路径，进行纹理信息的保存
         if len(fmi_texture_path) == 0:
-            fmi_texture_path = self.__get_fmi_texture_path()
+            fmi_texture_path = self.__get_path_fmi_texture()
 
         # 看一下有没有这个文件，有的话，直接进行读取，没有的话，再进行计算
         if os.path.exists(fmi_texture_path):
@@ -487,7 +485,7 @@ class DataFMI:
                 return texture_df
         try:
             # 计算纹理特征
-            texture_result = cal_images_texture(
+            texture_result = cal_fmis_texture(
                 imgs=[self._data_fmi],
                 depth=self._data_depth,
                 windows=texture_config['windows_length'],
@@ -504,7 +502,7 @@ class DataFMI:
             self._logger.error(f"纹理特征计算失败: {e}")
             raise
 
-    def __generate_texture_headers(self) -> List[str]:
+    def __generate_headers_texture(self) -> List[str]:
         """
         生成纹理特征列名列表
 
@@ -539,7 +537,7 @@ class DataFMI:
             'is_loaded': self._is_data_loaded,
             'resolution': self._resolution,
             'path_fde': self.__get_fmi_fde_path(),
-            'path_texture': self.__get_fmi_texture_path(),
+            'path_texture': self.__get_path_fmi_texture(),
         }
 
         if self._is_data_loaded:
@@ -549,15 +547,14 @@ class DataFMI:
                 'depth_shape': self._data_depth.shape,
                 'data_type': str(self._data_fmi.dtype),
                 'path_fde': self.__get_fmi_fde_path(),
-                'path_texture': self.__get_fmi_texture_path(),
+                'path_texture': self.__get_path_fmi_texture(),
             })
 
         return summary
 
     def __get_fmi_fde_path(self):
-        # 'path_fmi': r'F:\logging_workspace\桃镇1H\桃镇1H_DYNA_FULL_TEST.txt',
-        # return self.path_fmi.replace('.txt', '_fde_NMR.txt')
-        return self.__remove_path_image_extension(self.path_fmi) + '_fde_NMR.txt'
+        path_based = self.__remove_path_extension(self.path_fmi)
+        return path_based + '_fde_NMR.txt'
 
     def get_fmi_fde(self, config_fde={}, path_fde='') -> np.ndarray:
         """
@@ -623,6 +620,59 @@ class DataFMI:
 
         return image_new
 
+    def __get_fmi_segment_path(self):
+        """
+        ('tophat_otsu', 'TopHat + Otsu', None),
+        ('otsu', 'Otsu Threshold', None),
+        ('adaptive', 'Adaptive Threshold', None),
+        ('kmeans', 'K-means (K=3)', None),
+        ('gmm', 'GMM (n=3)', None),
+        ('wavelet', 'Wavelet (db4)', None),
+        """
+        path_based = self.__remove_path_extension(self.path_fmi)
+        path_ostu = path_based + '_ostu_seg.txt'
+        path_tophat_ostu = path_based + '_tophat-ostu_seg.txt'
+        path_adaptive = path_based + '_adaptive_seg.txt'
+        path_kmeans = path_based + '_kmeans_seg.txt'
+        path_gmm = path_based + '_gmm_seg.txt'
+        path_wavelet = path_based + '_wavelet_seg.txt'
+
+        return {'otsu':path_ostu, 'tophat_otsu':path_tophat_ostu, 'adaptive':path_adaptive, 'kmeans':path_kmeans, 'gmm':path_gmm, 'wavelet':path_wavelet}
+
+    def fmi_segment(self, config_preprocess={'windows': 200, 'step': 50, 'method_configs': {
+        ('tophat_otsu', 'TopHat + Otsu', None), ('otsu', 'Otsu Threshold', None), ('adaptive', 'Adaptive Threshold', None),
+        ('kmeans', 'K-means (K=3)', None), ('gmm', 'GMM (n=3)', None), ('wavelet', 'Wavelet (db4)', None),}}
+        ):
+        fmi_seg_result = {}
+        path_dict = self.__get_fmi_segment_path()
+        for key in path_dict.keys():
+            path = path_dict[key]
+            if os.path.exists(path):
+                fmi_seg_result_temp, depth_data = get_ele_data_from_path(path)
+                fmi_seg_result[key] = [fmi_seg_result_temp]
+        if len(fmi_seg_result) > 0:
+            return fmi_seg_result
+
+        method_configs = config_preprocess.get('method_configs', {('otsu', 'Otsu Threshold', None),})
+
+        result = cal_fmis_segmentation(imgs=[self._data_fmi], depth=self._data_depth,
+                                       windows=config_preprocess.get('windows', 200),
+                                       step=config_preprocess.get('step', 50),
+                                       method_configs=method_configs,
+        )
+
+
+        for dict in method_configs:
+            method = dict[0]
+            fmi_seg_result_temp = result[method][0]
+            # 合并上深度信息后，将数据进行保存
+            data_saved = np.hstack((self._data_depth.reshape((-1, 1)), fmi_seg_result_temp.astype(self._data_depth.dtype)))
+            path_saved = path_dict[method]
+            np.savetxt(path_saved, data_saved, fmt='%.4f', delimiter='\t', comments='',
+            header=f'WELLNAME= {self._well_name}_{self.fmi_charter}_{method}\nSTDEP   = {self._data_depth[0]}\nENDEP   = {self._data_depth[-1]}\nLEV     = 0.0025\nUNIT    = meter\nCURNAMES= IMAGE.DYNA\n\nDEPTH')
+
+        return result
+
 def user_specific_test():
     """
     用户特定测试 - 使用用户提供的文件路径
@@ -633,7 +683,9 @@ def user_specific_test():
 
     # 用户提供的测试用例
     test_case = {
-        'path_fmi': r'F:\logging_workspace\桃镇1H\桃镇1H_STAT_FULL.txt',
+        # 'path_fmi': r'F:\logging_workspace\桃镇1H\桃镇1H_STAT_FULL.txt',
+        # 'path_fmi': r'F:\logging_workspace\桃镇1H\桃镇1H_DYNA_FULL.txt',
+        'path_fmi': r'F:\logging_workspace\桃镇1H\桃镇1H_STAT_target.txt',
         # 'path_fmi': r'F:\logging_workspace\禄探\禄探_STAT.txt',
         # 'path_fmi': r'C:\Users\purem\Desktop\logging_workspace\禄探\禄探_STAT.txt',
         # 'fmi_charter': 'STAT',
@@ -651,9 +703,9 @@ def user_specific_test():
             fmi_charter=test_case['fmi_charter']
         )
 
-        # 执行用户要求的操作序列
-        print(">>> 执行空白条带删除...")
-        test_FMI.ele_stripes_delete()
+        # # 执行用户要求的操作序列
+        # print(">>> 执行空白条带删除...")
+        # test_FMI.ele_stripes_delete()
 
         print(">>> 获取数据...")
         fmi_data, depth_data = test_FMI.get_data()
@@ -670,19 +722,24 @@ def user_specific_test():
         for key, value in summary.items():
             print(f"  {key}: {value}")
 
-        FMI_TEXTURE = test_FMI.get_texture(texture_config = {
-                'level': 16,  # 灰度级别
-                'distance': [2, 4],  # 像素距离
-                # 'angles': [0, np.pi / 4, np.pi / 2, np.pi * 3 / 4],  # 角度方向
-                'angles': [0, np.pi / 2],  # 角度方向
-                'windows_length': 80,  # 窗口长度
-                'windows_step': 10  # 滑动步长
-            }
-        )
-        print(FMI_TEXTURE.describe())
+        # FMI_TEXTURE = test_FMI.get_texture(texture_config = {
+        #         'level': 16,  # 灰度级别
+        #         'distance': [2, 4],  # 像素距离
+        #         # 'angles': [0, np.pi / 4, np.pi / 2, np.pi * 3 / 4],  # 角度方向
+        #         'angles': [0, np.pi / 2],  # 角度方向
+        #         'windows_length': 80,  # 窗口长度
+        #         'windows_step': 10  # 滑动步长
+        #     }
+        # )
+        # print(FMI_TEXTURE.describe())
+        #
+        # FMI_FDE = test_FMI.get_fmi_fde()
+        # print('current fmi fde shape is:{}'.format(FMI_FDE.shape))
 
-        FMI_FDE = test_FMI.get_fmi_fde()
-        print('current fmi fde shape is:{}'.format(FMI_FDE.shape))
+        # FMI_SEG = test_FMI.fmi_segment()
+        # fmi_tophat_otsu = FMI_SEG['tophat_otsu'][0]
+        # fmi_kmeans = FMI_SEG['kmeans'][0]
+        # fmi_wavelet = FMI_SEG['wavelet'][0]
 
 
     except FileNotFoundError:
@@ -715,3 +772,48 @@ if __name__ == '__main__':
     # data_fmi_test.read_data()
     # print(data_fmi_test.get_summary())
 
+    #
+#
+#     LDM = LoggingDataManager(
+#         # logging_data=logging_data,
+#         logging_data=pd.DataFrame([]),
+#         fmi_data={'depth': depth_data, 'image_data': [255-fmi_data, fmi_tophat_otsu, fmi_kmeans, fmi_wavelet]},
+#         # nmr_data={'depth': depth_nmr, 'nmr_data': [data_nmr]}
+#     )
+#     config_logging ={}
+#
+#     config_fmi: Dict[str, Any] = {
+#         # 'color_map': 'rainbow',  # 电成像颜色绘制配置
+#         'color_map': 'hot',  # 电成像颜色绘制配置
+#         'scale_range': [0, 256],  # 电成像像素缩放配置
+#         'title_fmi': ['FMI_O', 'fmi_otsu', 'fmi_kmeans', 'fmi_wavelet']  # 电成像的绘图Title配置
+#     }
+#
+#     config_nmr: Dict[str, Any] = {
+#         'plot_density': 40,  # 每窗口绘制的密度
+#         'plot_amplitude_scaling': 0.002,  # 折线幅度的缩放因子
+#         'x_logarithmic_scale': True,  # x方向是否进行对数刻度
+#         'color_fill': 'green',  # 折线填充颜色配置
+#         'nmr_title': ['NMR_1'],
+#         'spectrum_config': {'line_style': '-', 'line_width': 0.8, 'fill_alpha': 0.5, 'baseline_visible': True},     # 谱绘制的配置
+#         'axis_config': {'x_axis_label': 'T2 Time (ms)', 'y_axis_label': 'Amplitude', 'show_grid': True, 'log_ticks': [0.1, 1, 10, 100, 1000]}       # x轴配置
+#     }
+#
+#     config_type: Dict[str, Any] = {
+#         'types_cols': [],  # 都是那些列需要进行分类的绘制
+#         'show_legend': True,
+#         'colors_type': {0: '#FF6B6B', 1: '#4ECDC4', 2: '#45B7D1', 3: '#96CEB4', 4: '#FECA57'},  # 相对应的颜色设置
+#         'width_type': {0: 0.2, 1: 0.4, 2: 0.6, 3: 0.8, 4: 1.0},  # 相对应的宽度设置
+#         'legend_dict': {0: 'Sandstone', 1: 'Mudstone', 2: 'Shale', 3: 'Limestone', 4: 'Dolomite'},  # 分类的Legend配置
+#         'display_config': {'legend_columns': 4, 'border_visible': False, 'border_width': 0.5},      #
+#         'pattern_config': {'use_patterns': True, 'pattern_alpha': 0.3, 'hatch_patterns': ['/', '\\', '|', '-', '+', 'x', 'o', 'O']}
+#     }
+#
+#     LDM.plot_config_check(config_logging=config_logging, config_fmi=config_fmi, config_nmr=config_nmr, config_type=config_type)
+#
+#     well_viewer = WellLogVisualizer(LDM, config_logging=config_logging, config_fmi=config_fmi, config_nmr=config_nmr, config_type=config_type)
+#
+#     # print(LDM.get_logging_resolution())
+#     # print(LDM.cal_plot_num())
+#
+#     well_viewer.visualize()
