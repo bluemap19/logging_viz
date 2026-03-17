@@ -258,29 +258,6 @@ LAYOUT_CONFIG = {
 
 ---
 
-## 📝 常见问题
-
-### Q1: 中文显示为方块？
-确保 matplotlib 字体配置正确：
-```python
-plt.rcParams['font.family'] = ['DejaVu Sans', 'SimHei', 'sans-serif']
-plt.rcParams['axes.unicode_minus'] = False
-```
-
-### Q2: 文件识别不到？
-检查文件命名是否符合规范：
-- 测井文件：`{井名}_logging_data.csv`
-- FMI 文件：`{井名}-DYNA.txt` 或 `{井名}-STAT.txt`
-- 岩性表格：`{井名}__LITHO_TYPE.csv`
-- NMR 文件：包含 `nmr` 关键字
-
-### Q3: 滚动时卡顿？
-- 启用缓存系统
-- 降低 FMI 像素密度配置
-- 减少同时显示的数据类型
-
----
-
 ## 📄 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
@@ -292,12 +269,6 @@ plt.rcParams['axes.unicode_minus'] = False
 - **Author:** Fuhao Zhang
 - **Email:** zhangfuhao19971002@163.com
 - **Research Area:** Well Logging Engineering, Geological Engineering, Deep Learning, Image Processing
-
----
-
-## 🙏 致谢
-
-感谢所有为该项目做出贡献的开发者和使用者的反馈！
 
 ---
 

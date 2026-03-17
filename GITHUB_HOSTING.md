@@ -16,7 +16,6 @@
 | **GitHub 仓库** | `https://github.com/bluemap19/logging_viz.git` |
 | **仓库所有者** | bluemap19 |
 | **当前分支** | main |
-| **最新提交** | 23c5165 - Initial commit: Well Logging Visualization System v1.0 |
 
 ---
 
@@ -37,6 +36,7 @@
 **Windows:** `%USERPROFILE%\AppData\Local\Git\credentials`
 
 **文件内容格式：**
+
 ```
 https://bluemap19:ghp_********34Senp@github.com
 ```
@@ -119,7 +119,6 @@ git branch -a
 1. ✅ Token 已存储在 Git 凭证管理器中
 2. ✅ 不要将 Token 提交到 Git 仓库
 3. ✅ .gitignore 已配置，排除敏感文件
-4. ⚠️ 定期轮换 Token（建议每 90 天）
 
 ### Token 轮换
 
