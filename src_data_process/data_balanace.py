@@ -8,12 +8,14 @@ plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'WenQuanYi Zen H
 plt.rcParams['axes.unicode_minus'] = False
 
 
+
 def abs_percent_autopct(values):
     def inner_autopct(pct):
         total = sum(values)
         count = int(round(pct * total / 100.0))
         return f"{count}\n({pct:.1f}%)"  # 合并显示数值和百分比
     return inner_autopct
+
 
 def smart_balance_dataset(df, target_col='岩性', method='smote', random_state=42, need_show=True, axes=None, Type_dict={}):
     """

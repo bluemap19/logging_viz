@@ -475,57 +475,7 @@ def process_image(image_path, output_dir, methods=None):
     return results
 
 
-def generate_summary_report(all_results, output_dir):
-    """生成总体对比报告"""
-    report_path = Path(output_dir) / 'summary_report.md'
-    
-    md = "# 🔬 电成像割理分割算法对比报告\n\n"
-    md += f"**生成时间:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    md += f"**测试图像数:** {len(all_results)}\n\n"
-    md += "---\n\n"
-    
-    # 汇总所有方法的指标
-    method_metrics = {}
-    for result in all_results:
-        for method, data in result['methods'].items():
-            if method not in method_metrics:
-                method_metrics[method] = {
-                    'contrast_ratio': [],
-                    'foreground_ratio': [],
-                    'cleat_density': []
-                }
-            method_metrics[method]['contrast_ratio'].append(data['metrics']['contrast_ratio'])
-            method_metrics[method]['foreground_ratio'].append(data['metrics']['foreground_ratio'])
-            method_metrics[method]['cleat_density'].append(data['metrics']['cleat_density'])
-    
-    # 计算平均指标
-    md += "## 📊 平均指标对比\n\n"
-    md += "| 方法 | 对比度比 | 前景占比 | 割理密度 (条/m) |\n"
-    md += "|------|----------|----------|----------------|\n"
-    
-    for method, metrics in method_metrics.items():
-        avg_cr = np.mean(metrics['contrast_ratio'])
-        avg_fr = np.mean(metrics['foreground_ratio'])
-        avg_cd = np.mean(metrics['cleat_density'])
-        md += f"| {method} | {avg_cr:.3f} | {avg_fr:.2%} | {avg_cd:.1f} |\n"
-    
-    md += "\n---\n\n"
-    
-    # 逐个图像结果
-    md += "## 📁 逐个图像结果\n\n"
-    for result in all_results:
-        md += f"### {result['image']}\n\n"
-        md += "| 方法 | 对比度比 | 前景占比 | 割理密度 |\n"
-        md += "|------|----------|----------|----------|\n"
-        for method, data in result['methods'].items():
-            m = data['metrics']
-            md += f"| {method} | {m['contrast_ratio']:.3f} | {m['foreground_ratio']:.2%} | {m['cleat_density']:.1f} |\n"
-        md += "\n"
-    
-    with open(report_path, 'w', encoding='utf-8') as f:
-        f.write(md)
-    
-    print(f"[OK] Summary report: {report_path}")
+
 
 
 def main():

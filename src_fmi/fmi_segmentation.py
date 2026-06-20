@@ -83,4 +83,8 @@ if __name__ == '__main__':
     fmi_data = fmi_test[:, 1:]
     print(depth_data.shape, fmi_data.shape)
 
-    result = cal_fmis_segmentation(imgs=[fmi_data], depth=depth_data, windows=200, step=50, path_segmentation_saved=r'F:\logging_workspace\桃镇1H', charters_str_saved='STAT')
+    result = cal_fmis_segmentation(imgs=[fmi_data], depth=depth_data, windows=400, step=400)
+    for method in list(result.keys()):
+        print(method)
+        print(result[method][0].shape, type(result[method]))
+

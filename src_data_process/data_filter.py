@@ -65,27 +65,6 @@ def pdnads_data_drop(data_input: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-# # 生成测试数据
-# np.random.seed(42)
-# base_data = np.vstack([
-#     make_blobs(n_samples=100, centers=1, cluster_std=0.5)[0],
-#     np.array([[1000, -1000], [-1000, 500]]),
-#     np.full((5, 2), -2147483648),
-#     np.array([['', 1], [np.nan, 3], [None, 5], [4, 8]]),
-# ])
-#
-# test_df = pd.DataFrame(
-#     data=base_data,
-#     columns=['Feature1', 'Feature2']
-# ).sample(frac=1).reset_index(drop=True)
-#
-# # # 执行清洗
-# # cleaned_df = pandas_data_filtration(test_df, enable_visualization=True)
-# # print("\n清洗后数据：")
-# # print(cleaned_df.head())
-#
-# a = pdnads_data_drop(test_df)
-
 def remove_static_depth_data(df, depth_col='DEPTH'):
     """
     删除测井数据中深度未变化的无效数据
