@@ -3,6 +3,8 @@ import pandas as pd
 from scipy import ndimage
 from typing import Tuple, List, Any, Dict
 
+from tqdm import trange
+
 
 def count_small_target_areas(
         binary_image: np.ndarray,
@@ -61,7 +63,7 @@ def count_small_target_areas(
         total_target_pixels = 0
 
         # 遍历所有连通区域(从1开始，0是背景)
-        for label in range(1, num_features + 1):
+        for label in trange(1, num_features + 1):
             area = areas[label]
 
             # 判断是否为小面积目标区域

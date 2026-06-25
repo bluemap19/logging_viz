@@ -65,7 +65,10 @@ class ConventionalLogInterpolator:
         - 可选: 插值质量评估字典
         """
         # 1. 数据验证和预处理
-        self._validate_input(df, depth_col, target_length)
+        try:
+            self._validate_input(df, depth_col, target_length)
+        except Exception as e:
+            raise e
 
         # 2. 准备数据
         depth_original = df[depth_col].values
@@ -118,7 +121,14 @@ class ConventionalLogInterpolator:
             raise TypeError("输入必须是pandas DataFrame")
 
         if depth_col not in df.columns:
-            raise ValueError(f"深度列 '{depth_col}' 不存在于DataFrame中")
+            if not df.columns[0].__contains__('DEPTH'):
+                raise ValueError(f"深度列 '{depth_col}' 不存在于DataFrame中")
+            else:
+                depth_col = df.columns[0]
+
+        if df.isnull().any().any():
+            df.fillna(0, inplace=True)
+            print('dataframe contain nan, and now replace it with 0')
 
         if len(df) < 2:
             raise ValueError("数据点太少，至少需要2个点进行插值")
