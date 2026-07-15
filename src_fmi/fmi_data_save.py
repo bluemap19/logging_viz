@@ -105,8 +105,8 @@ def fmi_data_save(
                     f.write(line + '\n')
             else:
                 f.write("# FMI ELECTRIC IMAGE DATA\n")
-                f.write(f"# DEPTH START: {depth_data[0]:.4f}\n")
-                f.write(f"# DEPTH END  : {depth_data[-1]:.4f}\n")
+                f.write(f"# DEPTH START: {depth_data[0]:.6f}\n")
+                f.write(f"# DEPTH END  : {depth_data[-1]:.6f}\n")
                 f.write("# COLUMNS: DEPTH + IMAGE DATA\n")
                 f.write("# UNIT: NORMALIZED\n")
                 f.write("# FORMAT: TAB DELIMITED\n")
@@ -114,7 +114,7 @@ def fmi_data_save(
                 f.write("#\n")
 
             for i in range(len(depth_data)):
-                line = f"{depth_data[i]:.4f}"
+                line = f"{depth_data[i]:.6f}"
                 for v in img_data[i]:
                     line += f"\t{v:.6f}"
                 f.write(line + "\n")
@@ -129,7 +129,6 @@ def fmi_data_save(
         df.insert(0, 'DEPTH', depth_data)
         df.to_csv(save_path, index=False)
         print(f"[SAVE] CSV 保存成功: {save_path}")
-
     else:
         raise ValueError("不支持的文件格式")
 

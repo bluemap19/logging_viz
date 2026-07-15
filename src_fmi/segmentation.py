@@ -85,10 +85,10 @@ class FMISegmentation:
         
         self.results['otsu_threshold'] = ret
         
-        # 后处理：去除小噪声
-        kernel_post = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel_post, iterations=1)
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_post, iterations=1)
+        # # 后处理：去除小噪声
+        # kernel_post = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        # thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel_post, iterations=1)
+        # thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_post, iterations=1)
         
         return thresh
     

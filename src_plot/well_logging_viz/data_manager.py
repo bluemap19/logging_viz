@@ -21,7 +21,7 @@ class LoggingDataManager:
         'nmr_cache_size': 100,
     }
 
-    def __init__(self, logging_data:pd.DataFrame=None,  # 常规测井数据
+    def __init__(self, logging_data:pd.DataFrame=pd.DataFrame([]),  # 常规测井数据
                     fmi_data:dict=None,                 # FMI测井数据
                     nmr_data:dict=None                  # NMR测井数据
         ):
