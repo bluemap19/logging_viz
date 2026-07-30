@@ -71,7 +71,65 @@ fig, axs = plt.subplots(
 
 ---
 
-## 4. 渲染流程
+## 4. 分类面板条带渲染 — `_batch_render_classification()`
+
+### 4.0 问题背景：条带间隙 bug
+
+**现象**：`config_type = {'types_cols': 'auto'}` 时，分类条带之间存在空白，不连续。
+
+**根因**：原实现按分类值 `groupby` 后遍历，破坏了原始深度顺序，导致被其他值隔开的同类别点各自画矩形，条带之间产生间隙。
+
+**修复方案**：改为按原始深度顺序扫描，将相邻且类别相同的点**合并为一条连续条带**，边界取相邻点的中点，彻底消除间隙。
+
+### 4.0.1 修复前（错误）
+
+```python
+# 按分类值 groupby —— 破坏深度顺序
+class_groups = visible_data.groupby(class_col)
+for class_val, group in class_groups:
+    for depth in group[depth_col]:  # 深度顺序被打乱
+        y_bottom = depth - resolution / 2
+        y_top = depth + resolution / 2
+        # 相邻同类别点各自画矩形 → 条带间有间隙
+```
+
+### 4.0.2 修复后（正确）
+
+```python
+# 按原始深度顺序扫描
+i = 0
+while i < n:
+    if pd.isna(class_values[i]):
+        i += 1
+        continue
+
+    class_int = int(class_values[i])
+    strip_start = depths[i]
+
+    # 向后扫描所有连续同类别的点
+    j = i + 1
+    while j < n and int(class_values[j]) == class_int:
+        j += 1
+
+    strip_end = depths[j - 1]
+
+    # 边界取相邻点中点（消除间隙）
+    y_bottom = (strip_start + depths[i-1]) / 2 if i > 0 else strip_start - res/2
+    y_top    = (strip_end   + depths[j])   / 2 if j < n else strip_end   + res/2
+
+    # 画一条合并后的连续矩形
+    vertices = [[0, y_bottom], [xmax, y_bottom], [xmax, y_top], [0, y_top]]
+    i = j  # 跳到下一段
+```
+
+### 4.0.3 视觉效果对比
+
+```
+修复前：  [========]     [===]  [==]   ← 有间隙
+修复后：  [===============]         ← 紧密连接
+```
+
+### 4.1 渲染流程
 
 ### 4.1 首次渲染 — `visualize()`
 
@@ -93,7 +151,7 @@ def visualize(self, top_depth: float, bottom_depth: float) -> None:
     # Step 5: 绘制所有面板
     self._plot_all_fmi_panels()        # FMI
     self._plot_all_curve_panels()       # 常规曲线
-    self._plot_all_classification_panels()  # 岩性分类
+    self._plot_all_classification_panels()  # 岩性分类（连续条带，无间隙）
     self._plot_all_nmr_panels()        # NMR 谱
     self._plot_all_core_lines()         # 新增：岩心杆状图
 
@@ -152,13 +210,13 @@ mapping = {
 
 ---
 
-## 6. 岩心杆状图叠加绘制
+## 7. 岩心杆状图叠加绘制
 
 > 详见 `docs/05_岩心数据叠加绘制_设计文档.md`
 
 ---
 
-## 7. 拖动交互 — `_bind_drag_events()`
+## 8. 拖动交互 — `_bind_drag_events()`
 
 ### 7.1 事件绑定
 
@@ -180,7 +238,7 @@ def _bind_drag_events(self):
 
 ---
 
-## 8. 坐标轴美化 — `_setup_axes()`
+## 9. 坐标轴美化 — `_setup_axes()`
 
 ```python
 def _setup_axes(self):

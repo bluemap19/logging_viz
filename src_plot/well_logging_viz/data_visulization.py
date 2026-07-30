@@ -497,48 +497,72 @@ class WellLogVisualizer:
 
         优化策略：
         - 使用PolyCollection批量绘制多边形，比逐个绘制矩形性能更高
-        - 按分类值分组，相同颜色的矩形批量处理
-        - 减少matplotlib绘图调用次数
+        - 按原始深度顺序扫描，将相邻且类别相同的点合并为连续条带
+        - 保证条带之间紧密连接，无空白间隙
         """
         if visible_data.empty:
             return  # 无可见数据时直接返回
 
-        # 按分类值分组数据
-        class_groups = visible_data.groupby(class_col)
+        depth_col = self.config_logging['depth_col']
+        if class_col not in visible_data.columns or depth_col not in visible_data.columns:
+            return
+
+        depths = visible_data[depth_col].values
+        class_values = visible_data[class_col].values
+
         vertices_list = []  # 存储所有矩形的顶点
-        colors_list = []  # 存储对应的颜色
+        colors_list = []    # 存储对应的颜色
 
-        # 为每个分类值创建矩形
-        for class_val, group in class_groups:
-            if pd.isna(class_val) or class_val < 0:
-                continue  # 跳过无效值
+        i = 0
+        n = len(depths)
 
-            class_int = int(class_val)
-            # 获取该分类的显示宽度
+        while i < n:
+            # 跳过无效值
+            if pd.isna(class_values[i]) or class_values[i] < 0:
+                i += 1
+                continue
+
+            class_int = int(class_values[i])
+            color = self.config_type['colors_type'][class_int]
             xmax = self.litho_width_config.get(class_int, 0.1)
 
-            # 根据分类值选择颜色
-            color = self.config_type['colors_type'][class_int]
-            # color = self.DEFAULT_TYPE_COLORS[class_int % len(self.DEFAULT_TYPE_COLORS)]
+            # 从当前位置开始，向后扫描所有连续同类别的深度点
+            strip_start_depth = depths[i]
+            j = i + 1
+            while j < n and not pd.isna(class_values[j]) and int(class_values[j]) == class_int:
+                j += 1
 
-            # 为每个深度点创建矩形
-            for depth in group[self.config_logging['depth_col']]:
-                # 计算矩形的上下边界（基于深度分辨率）
-                y_bottom = depth - self.resolution / 2
-                y_top = depth + self.resolution / 2
+            strip_end_depth = depths[j - 1]
 
-                # 定义矩形的四个顶点（左下→右下→右上→左上）
-                vertices = [[0, y_bottom], [xmax, y_bottom], [xmax, y_top], [0, y_top]]
-                vertices_list.append(vertices)
-                colors_list.append(color)
+            # 扩展条带边界至相邻点的中点（消除间隙）
+            if i == 0:
+                y_bottom = strip_start_depth - self.resolution / 2
+            else:
+                # 与前一个非空点取中点
+                prev_depth = depths[i - 1]
+                y_bottom = (strip_start_depth + prev_depth) / 2
 
-        # 如果有矩形数据，批量绘制
+            if j >= n:
+                y_top = strip_end_depth + self.resolution / 2
+            else:
+                # 与后一个点取中点
+                next_depth = depths[j]
+                y_top = (strip_end_depth + next_depth) / 2
+
+            # 定义连续条带的四个顶点
+            vertices = [[0, y_bottom], [xmax, y_bottom], [xmax, y_top], [0, y_top]]
+            vertices_list.append(vertices)
+            colors_list.append(color)
+
+            i = j  # 跳到下一个未处理的点
+
+        # 如果有条带数据，批量绘制
         if vertices_list:
             poly_collection = PolyCollection(vertices_list,
-                                             facecolors=colors_list,  # 填充颜色
-                                             edgecolors='none',  # 无边框
-                                             linewidths=0)  # 边框宽度0
-            ax.add_collection(poly_collection)  # 添加到轴
+                                             facecolors=colors_list,
+                                             edgecolors='none',
+                                             linewidths=0)
+            ax.add_collection(poly_collection)
 
     def _plot_all_classification_panels(self) -> None:
         """绘制所有分类数据面板"""

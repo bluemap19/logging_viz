@@ -104,6 +104,13 @@ if __name__ == '__main__':
     }
     # config_core = {}
 
+    index_type = data_logging.columns.to_list().index('Type')
+    data_logging.iloc[3, index_type] = None
+    data_logging.iloc[9, index_type] = None
+    data_logging.iloc[12, index_type] = None
+    data_logging.iloc[14, index_type] = None
+    data_logging.iloc[58, index_type] = None
+
     well_viewer = WellLogVisualizer(LDM,
                                     config_logging={'curves_plot':['CON_MEAN_DYNA', 'DIS_MEAN_DYNA', ['ENG_MEAN_DYNA', 'ENG_SUB_DYNA'], ['HOM_MEAN_DYNA', 'HOM_SUB_DYNA'], ['CON_SUB_DYNA', 'DIS_SUB_DYNA']]},
                                     config_type = {'types_cols': 'auto'},
