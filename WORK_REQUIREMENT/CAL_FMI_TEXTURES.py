@@ -1,8 +1,8 @@
 import logging
 import numpy as np
 import pandas as pd
-from src_well_data_base.data_logging_FMI import DataFMI
-from src_well_data_base.data_logging_well import DATA_WELL
+
+from src_well_data.data_logging_well import DATA_WELL
 
 
 def user_specific_test():

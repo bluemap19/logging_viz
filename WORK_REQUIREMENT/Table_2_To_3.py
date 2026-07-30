@@ -21,3 +21,4 @@ if __name__ == '__main__':
     table_3 = class_table.get_table_3()
     print(table_3)
     # table_3.to_csv(path_or_buf=test_case['path_save'], index=True)
+

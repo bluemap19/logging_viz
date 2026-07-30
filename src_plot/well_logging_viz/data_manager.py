@@ -655,15 +655,6 @@ class LoggingDataManager:
 
         # 6. 范围配置验证和自动补全
         # range_config: 每个岩心曲线对应的 [min, max] 缩放范围
-            # 默认岩心颜色序列
-            default_core_colors = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#9370DB']
-            colors_config = list(colors_config) + [
-                default_core_colors[i % len(default_core_colors)] for i in range(len(colors_config), n_curves)
-            ]
-            config['colors_config'] = colors_config
-
-        # 7. 范围配置验证和自动补全
-        # range_config: 每个岩心曲线对应的 [min, max] 缩放范围
         range_config = config.get('range_config', [])
         if len(range_config) < n_curves:
             for curve_col in config['core_curves'][len(range_config):]:
