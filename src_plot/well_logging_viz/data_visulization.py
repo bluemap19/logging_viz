@@ -106,7 +106,8 @@ class WellLogVisualizer:
         config_logging={},
         config_fmi: Dict[str, Any]={},
         config_nmr: Dict[str, Any]={},
-        config_type: Dict[str, Any]={}) -> None:
+        config_type: Dict[str, Any]={},
+        config_core: Dict[str, Any]={}) -> None:
         """
         初始化测井数据可视化器
         LoggingDataManager 测井数据管理器
@@ -114,9 +115,22 @@ class WellLogVisualizer:
         config_fmi：电成像绘图配置
         config_nmr： 核磁绘图配置
         config_type： 分类结果绘图配置
+        config_core： 岩心实验数据配置（叠加绘制在已有道上）
+            plot_index_list : 岩心叠加在哪几道
+            core_curves      : 岩心曲线对应 logging_data 的哪几列
+            thicknesses_config: 杆粗细（线宽）
+            colors_config    : 杆颜色
+            axis_config      : 坐标轴是否 log
+            range_config     : 数据范围（用于归一化缩放）
         """
         # 使用数据管理器检查各个配置项，看一下各个配置项是否合适
-        validated_configs = data_manager.plot_config_check(config_logging=config_logging, config_fmi=config_fmi, config_nmr=config_nmr, config_type=config_type)
+        validated_configs = data_manager.plot_config_check(
+            config_logging=config_logging,
+            config_fmi=config_fmi,
+            config_nmr=config_nmr,
+            config_type=config_type,
+            config_core=config_core
+        )
 
         self.data_manager = data_manager
 
@@ -124,6 +138,7 @@ class WellLogVisualizer:
         self.config_fmi = validated_configs['fmi']
         self.config_nmr = validated_configs['nmr']
         self.config_type = validated_configs['type']
+        self.config_core = validated_configs.get('core', {})
 
         self.logger = data_manager.get_class_logger()
 
@@ -158,6 +173,11 @@ class WellLogVisualizer:
         self.nmr_axes: List[plt.Axes] = []
         self.nmr_plots: List[Dict[str, Any]] = []  # 存储每个NMR道的绘图对象
         self.config_num_density: Dict[str, int] = {}   # 存放在不同显示窗长配置下，要显示几个NMR谱
+
+        # ========== 岩心实验数据叠加绘制属性 ==========
+        # 岩心数据以杆状图叠加绘制在已有道上，不占用独立面板
+        # core_line_groups[i] : 第 i 个岩心曲线的所有 Line2D 对象列表
+        self.core_line_groups: List[List[Any]] = []
 
         # 设置matplotlib字体
         self._setup_matplotlib_fonts()
@@ -624,6 +644,224 @@ class WellLogVisualizer:
             fill = ax.fill_between([], [], [], linewidth=self.config_nmr['spectrum_config']['line_width'], alpha=self.config_nmr['spectrum_config']['fill_alpha'], color=self.config_nmr['color_fill'], visible=False)
             nmr_plot['fill_pool'].append(fill)
 
+    # ===========================================================================
+    # 岩心实验数据杆状图叠加绘制（叠加在已有道上，不占用独立面板）
+    # ===========================================================================
+
+    def _get_curve_axes_indices(self) -> Dict[int, int]:
+        """
+        获取常规曲线面板对应的轴索引映射
+
+        返回：
+            Dict[curve_plot_index -> ax_index]
+            例如 {0: 1, 1: 2, 2: 3} 表示第0个曲线道在 axs[1]，第1个在 axs[2]，以此类推
+        """
+        mapping = {}
+        idx = self.n_fmi_panels  # 曲线道从 FMI 面板之后开始
+        for i in range(len(self.config_logging.get('curves_plot', []))):
+            mapping[i] = idx
+            idx += 1
+        return mapping
+
+    def _plot_all_core_lines(self) -> None:
+        """
+        初始绘制：岩心杆状图叠加在已有道上
+
+        岩心数据特点：稀疏（大部分深度为 NaN），叠加绘制在常规曲线道的上方区域
+        每个岩心曲线在指定道上叠加绘制若干水平短线（杆），线宽由归一化值决定
+        """
+        self.core_line_groups = []  # 重置线组
+
+        core_curves = self.config_core.get('core_curves', [])
+        if not core_curves:
+            return
+
+        # 获取曲线道轴索引映射
+        curve_ax_map = self._get_curve_axes_indices()
+
+        depth_col = self.config_logging['depth_col']
+        if depth_col not in self.logging_data_windows.columns:
+            return
+
+        depth_data = self.logging_data_windows[depth_col].values
+
+        for i, curve_col in enumerate(core_curves):
+            if curve_col not in self.logging_data_windows.columns:
+                self.core_line_groups.append([])
+                continue
+
+            # 获取该岩心曲线配置
+            plot_idx = self.config_core['plot_index_list'][i] if i < len(self.config_core['plot_index_list']) else 0
+            ax_idx = curve_ax_map.get(plot_idx, self.n_fmi_panels)  # 降级到第一个曲线道
+            ax = self.axs[ax_idx]
+
+            # 获取样式配置
+            thickness = 1.5
+            if i < len(self.config_core.get('thicknesses_config', [])):
+                thickness = self.config_core['thicknesses_config'][i]
+            color = self.DEFAULT_CURVE_COLORS[i % len(self.DEFAULT_CURVE_COLORS)]
+            if i < len(self.config_core.get('colors_config', [])):
+                color = self.config_core['colors_config'][i]
+
+            # 获取范围配置（用于归一化）
+            curve_min, curve_max = 0.0, 1.0
+            if i < len(self.config_core.get('range_config', [])):
+                rng = self.config_core['range_config'][i]
+                if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                    curve_min, curve_max = float(rng[0]), float(rng[1])
+
+            # 获取该道的 X 轴范围（用于归一化参考）
+            xlim = ax.get_xlim()
+            x_range = xlim[1] - xlim[0]
+
+            # 获取该岩心曲线的数据（仅非 NaN）
+            curve_data = self.logging_data_windows[curve_col].values
+
+            line_group = []
+            for depth, value in zip(depth_data, curve_data):
+                if pd.isna(value) or not np.isfinite(value):
+                    continue  # 跳过 NaN
+
+                # 跳过异常值
+                if value < curve_min or value > curve_max:
+                    continue
+
+                # 归一化值 -> 映射到道的 X 轴范围
+                # 策略：将归一化值映射到整个道的宽度（从最左侧 xlim[0] 开始）
+                norm = (value - curve_min) / (curve_max - curve_min) if curve_max != curve_min else 0.5
+                norm = np.clip(norm, 0.0, 1.0)
+
+                # 岩心杆从道最左侧开始
+                x_start = xlim[0]
+                x_width = x_range * 0.90 * norm  # 最大宽度为道宽的 90%
+                x_end = x_start + x_width
+
+                # 绘制水平短线
+                line, = ax.plot(
+                    [x_start, x_end],
+                    [depth, depth],
+                    color=color,
+                    linewidth=thickness,
+                    solid_capstyle='round',
+                    zorder=10  # 确保在曲线之上
+                )
+                line_group.append(line)
+
+            self.core_line_groups.append(line_group)
+            self.logger.debug(f"岩心曲线 {curve_col} 绘制 {len(line_group)} 个杆状标记 -> 道 {ax_idx}")
+
+    def _update_core_lines(self) -> None:
+        """
+        刷新：更新岩心杆状图（深度窗口变化时调用）
+
+        策略：
+        1. 遍历所有岩心曲线配置
+        2. 对每个曲线，清除旧线，重绘新线
+        3. 仅绘制当前深度窗口内非 NaN 的数据点
+        """
+        core_curves = self.config_core.get('core_curves', [])
+        if not core_curves:
+            return
+
+        curve_ax_map = self._get_curve_axes_indices()
+        depth_col = self.config_logging['depth_col']
+
+        if depth_col not in self.logging_data_windows.columns:
+            return
+
+        depth_data = self.logging_data_windows[depth_col].values
+
+        for i, curve_col in enumerate(core_curves):
+            if curve_col not in self.logging_data_windows.columns:
+                # 无该列，清除已有线
+                if i < len(self.core_line_groups):
+                    for line in self.core_line_groups[i]:
+                        line.set_visible(False)
+                continue
+
+            # 获取配置
+            plot_idx = self.config_core['plot_index_list'][i] if i < len(self.config_core['plot_index_list']) else 0
+            ax_idx = curve_ax_map.get(plot_idx, self.n_fmi_panels)
+            ax = self.axs[ax_idx]
+
+            thickness = 1.5
+            if i < len(self.config_core.get('thicknesses_config', [])):
+                thickness = self.config_core['thicknesses_config'][i]
+            color = self.DEFAULT_CURVE_COLORS[i % len(self.DEFAULT_CURVE_COLORS)]
+            if i < len(self.config_core.get('colors_config', [])):
+                color = self.config_core['colors_config'][i]
+
+            curve_min, curve_max = 0.0, 1.0
+            if i < len(self.config_core.get('range_config', [])):
+                rng = self.config_core['range_config'][i]
+                if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                    curve_min, curve_max = float(rng[0]), float(rng[1])
+
+            xlim = ax.get_xlim()
+            x_range = xlim[1] - xlim[0]
+
+            curve_data = self.logging_data_windows[curve_col].values
+
+            # 复用或新建线组
+            if i < len(self.core_line_groups):
+                existing_lines = self.core_line_groups[i]
+                n_existing = len(existing_lines)
+            else:
+                existing_lines = []
+                n_existing = 0
+
+            # 统计当前窗口内有效数据点
+            valid_count = 0
+            for depth, value in zip(depth_data, curve_data):
+                if pd.isna(value) or not np.isfinite(value):
+                    continue
+                if value < curve_min or value > curve_max:
+                    continue
+                valid_count += 1
+
+            # 逐点更新：复用已有线对象，超出部分隐藏，不足时新建
+            line_idx = 0
+            for depth, value in zip(depth_data, curve_data):
+                if pd.isna(value) or not np.isfinite(value):
+                    continue
+                if value < curve_min or value > curve_max:
+                    continue
+
+                norm = (value - curve_min) / (curve_max - curve_min) if curve_max != curve_min else 0.5
+                norm = np.clip(norm, 0.0, 1.0)
+                # 岩心杆从道最左侧开始
+                x_start = xlim[0]
+                x_width = x_range * 0.90 * norm  # 最大宽度为道宽的 90%
+
+                if line_idx < n_existing:
+                    # 复用已有线
+                    line = existing_lines[line_idx]
+                    line.set_data([x_start, x_start + x_width], [depth, depth])
+                    line.set_visible(True)
+                else:
+                    # 新建线
+                    line, = ax.plot(
+                        [x_start, x_start + x_width],
+                        [depth, depth],
+                        color=color,
+                        linewidth=thickness,
+                        solid_capstyle='round',
+                        zorder=10
+                    )
+                    existing_lines.append(line)
+
+                line_idx += 1
+
+            # 隐藏多余线
+            for j in range(line_idx, n_existing):
+                existing_lines[j].set_visible(False)
+
+            # 同步更新线组
+            if i < len(self.core_line_groups):
+                self.core_line_groups[i] = existing_lines
+            else:
+                self.core_line_groups.append(existing_lines)
+
     def _plot_all_nmr_panels(self) -> None:
         """绘制所有NMR谱面板"""
         self.nmr_axes = []
@@ -951,6 +1189,11 @@ class WellLogVisualizer:
         self.logger.debug("渲染核磁完成: %.1fms", (time.time() - start_time) * 1000)
         start_time = time.time()
 
+        # ========== 岩心杆状图叠加绘制 ==========
+        if self.config_core.get('core_curves'):
+            self._update_core_lines()
+        self.logger.debug("渲染岩心杆状图完成: %.1fms", (time.time() - start_time) * 1000)
+
         self._update_depth_indicator(top_depth, bottom_depth)
         self.logger.debug("渲染深度指示器完成: %.1fms", (time.time() - start_time) * 1000)
         start_time = time.time()
@@ -1142,6 +1385,7 @@ class WellLogVisualizer:
             self._plot_all_curves()  # 绘制曲线面板
             self._plot_all_classification_panels()  # 绘制分类面板
             self._plot_all_nmr_panels()         # 绘制NMR核磁谱面板
+            self._plot_all_core_lines()          # 绘制岩心杆状图（叠加在已有道上）
 
             # ========== 交互功能 ==========
             self.window_size_slider.on_changed(self._on_window_size_change)  # 滑动条回调

@@ -37,11 +37,17 @@ class EnhancedWellLogCache:
         self._nmr_cache = OrderedDict()
         self._nmr_compression_stats = {'compressed_size': 0, 'original_size': 0}
 
+        # 岩心实验数据缓存 (DataFrame格式，与常规测井共享存储)
+        # 岩心数据存储在 logging_data DataFrame 的特定列中，此处不再单独缓存
+        # 仅记录统计信息
+        self._core_stats = {'access_count': 0}
+
         # 缓存统计
         self.stats = {
             'data_hits': 0, 'data_misses': 0,  # 常规测井缓存统计
             'fmi_hits': 0, 'fmi_misses': 0,  # FMI缓存统计
-            'nmr_hits': 0, 'nmr_misses': 0  # NMR缓存统计
+            'nmr_hits': 0, 'nmr_misses': 0,  # NMR缓存统计
+            'core_accesses': 0                # 岩心数据访问统计（岩心数据复用logging_data缓存）
         }
 
     def _generate_cache_key(self, depth_range: Tuple[float, float], data_type: str = 'data') -> str:
@@ -334,3 +340,15 @@ class EnhancedWellLogCache:
         memory_usage['total_mb'] = sum(memory_usage.values())
 
         return memory_usage
+
+    # ========== 岩心实验数据访问统计（复用常规测井缓存） ==========
+    def record_core_access(self) -> None:
+        """
+        记录岩心数据访问
+
+        说明：
+        岩心数据直接复用常规测井 DataFrame 缓存（由 get_logging_data / set_logging_data 管理），
+        无需单独存储。调用此方法用于统计岩心数据访问次数。
+        """
+        self.stats['core_accesses'] += 1
+        self._core_stats['access_count'] += 1

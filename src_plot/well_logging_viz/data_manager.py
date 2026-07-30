@@ -23,7 +23,7 @@ class LoggingDataManager:
 
     def __init__(self, logging_data:pd.DataFrame=pd.DataFrame([]),  # 常规测井数据
                     fmi_data:dict=None,                 # FMI测井数据
-                    nmr_data:dict=None                  # NMR测井数据
+                    nmr_data:dict=None,                 # NMR测井数据
         ):
         self.depth_min: float = np.inf      # 数据最小深度
         self.depth_max: float = -np.inf     # 数据最大深度
@@ -54,6 +54,11 @@ class LoggingDataManager:
         self._validate_nmr_data(nmr_data)               # 验证NMR谱类数据
         self.nmr_data = nmr_data                        # nmr数据初始化
         self.config_nmr = {}                            # nmr核磁数据绘制设置
+
+        # ========== 岩心实验数据配置 ==========
+        # 岩心实验数据存储在 logging_data DataFrame 的特定列中（稀疏数据，大部分为 NaN）
+        # 可视化时以杆状图形式叠加绘制在已有道上方，无需独立面板
+        self.config_core = {}
 
         self._get_depth_limits()                        # 计算深度上下限
 
@@ -521,7 +526,8 @@ class LoggingDataManager:
                           config_logging: Dict[str, Any] = None,
                           config_fmi: Dict[str, Any] = None,
                           config_nmr: Dict[str, Any] = None,
-                          config_type: Dict[str, Any] = None) -> Dict[str, Dict[str, Any]]:
+                          config_type: Dict[str, Any] = None,
+                          config_core: Dict[str, Any] = None) -> Dict[str, Dict[str, Any]]:
         """
         绘图配置智能检查与自动补全系统
 
@@ -549,24 +555,124 @@ class LoggingDataManager:
         config_fmi = self._deep_merge_configs(default_configs['fmi'], config_fmi or {})
         config_nmr = self._deep_merge_configs(default_configs['nmr'], config_nmr or {})
         config_type = self._deep_merge_configs(default_configs['type'], config_type or {})
+        config_core = self._deep_merge_configs(default_configs['core'], config_core or {})
 
         # 执行配置验证和适配
         validated_configs = {
             'logging': self._validate_and_adapt_logging_config(config_logging),
             'fmi': self._validate_and_adapt_fmi_config(config_fmi),
             'nmr': self._validate_and_adapt_nmr_config(config_nmr),
-            'type': self._validate_and_adapt_type_config(config_type)
+            'type': self._validate_and_adapt_type_config(config_type),
+            'core': self._validate_and_adapt_core_config(config_core)
         }
 
         self.config_logging = config_logging
         self.config_fmi = config_fmi
         self.config_nmr = config_nmr
         self.config_type = config_type
+        self.config_core = config_core
 
         # 记录配置检查结果
         self._log_config_check_results(validated_configs)
 
         return validated_configs
+
+    def _validate_and_adapt_core_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        验证和适配岩心实验数据配置
+
+        岩心数据特点：
+        - 存储在 logging_data DataFrame 的特定列中（稀疏数据，大部分为 NaN）
+        - 可视化时以杆状图形式叠加绘制在已有道上方，不占用独立面板
+        - 杆粗细和颜色由配置控制
+
+        配置项：
+        - plot_index_list  : 岩心数据叠加绘制在哪几道（道索引，从0开始）
+        - core_curves      : 岩心数据对应 logging_data 的哪几列
+        - thicknesses_config: 杆粗细设置（线宽）
+        - colors_config    : 岩心杆颜色设置
+        - axis_config      : 坐标轴是否 log 配置
+        - range_config     : 数据上下范围设置（用于缩放）
+        """
+        # 1. 岩心曲线列表验证
+        core_curves = config.get('core_curves', [])
+        if not core_curves:
+            # 配置为空时不绘制岩心数据（静默跳过）
+            logger.info("岩心数据配置为空，跳过岩心杆状图绘制")
+            config['core_curves'] = []
+            config['plot_index_list'] = []
+            return config
+
+        # 2. 验证岩心曲线列是否存在于 logging_data
+        if self.logging_data is not None and not self.logging_data.empty:
+            available_columns = set(self.logging_data.columns)
+            valid_core_curves = [c for c in core_curves if c in available_columns]
+
+            if len(valid_core_curves) < len(core_curves):
+                missing = set(core_curves) - set(valid_core_curves)
+                logger.warning(f"岩心曲线列不存在: {missing}，已忽略")
+
+            config['core_curves'] = valid_core_curves
+
+            # 如果 plot_index_list 未指定，按 core_curves 数量自动分配
+            plot_index_list = config.get('plot_index_list', [])
+            if not plot_index_list:
+                # 默认：均分到各常规曲线道（循环分配）
+                n_curves = len(self.config_logging['curves_plot']) if self.config_logging.get('curves_plot') else 1
+                if n_curves > 0:
+                    config['plot_index_list'] = [i % n_curves for i in range(len(valid_core_curves))]
+                    logger.info(f"自动分配岩心曲线到道: {config['plot_index_list']}")
+        else:
+            config['core_curves'] = []
+            config['plot_index_list'] = []
+            return config
+
+        # 3. 粗细配置智能补全
+        thicknesses_config = config.get('thicknesses_config', [])
+        n_curves = len(config['core_curves'])
+        if len(thicknesses_config) < n_curves:
+            default_thickness = 2.0  # 默认杆粗细（线宽）
+            thicknesses_config = list(thicknesses_config) + [default_thickness] * (n_curves - len(thicknesses_config))
+            config['thicknesses_config'] = thicknesses_config
+
+        # 4. 颜色配置智能补全
+        colors_config = config.get('colors_config', [])
+        if len(colors_config) < n_curves:
+            # 默认岩心颜色序列
+            default_core_colors = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#9370DB']
+            colors_config = list(colors_config) + [
+                default_core_colors[i % len(default_core_colors)] for i in range(len(colors_config), n_curves)
+            ]
+            config['colors_config'] = colors_config
+
+        # 5. 范围配置验证和自动补全
+        # range_config: 每个岩心曲线对应的 [min, max] 缩放范围
+        range_config = config.get('range_config', [])
+        if len(range_config) < n_curves:
+            for curve_col in config['core_curves'][len(range_config):]:
+                # 从实际数据中获取有效范围（忽略 NaN）
+                if curve_col in self.logging_data.columns:
+                    valid_vals = self.logging_data[curve_col].dropna()
+                    if not valid_vals.empty:
+                        col_min = float(valid_vals.min())
+                        col_max = float(valid_vals.max())
+                        # 添加 5% 边距
+                        margin = (col_max - col_min) * 0.05 if col_max != col_min else 1.0
+                        range_config.append([max(0, col_min - margin), col_max + margin])
+                    else:
+                        range_config.append([0.0, 1.0])  # 无数据时使用默认值
+                else:
+                    range_config.append([0.0, 1.0])
+            config['range_config'] = range_config
+
+        # 6. 坐标轴配置验证
+        axis_config = config.get('axis_config', [])
+        if len(axis_config) < n_curves:
+            axis_config = list(axis_config) + [False] * (n_curves - len(axis_config))
+            config['axis_config'] = axis_config
+
+        logger.info(f"岩心数据配置验证完成: {n_curves} 个岩心曲线 -> {config['plot_index_list']}")
+        return config
 
     def _get_default_plot_configs(self) -> Dict[str, Dict[str, Any]]:
         """获取完整的默认绘图配置模板"""
@@ -624,6 +730,14 @@ class LoggingDataManager:
                     'pattern_alpha': 0.3,       # legend的指示填充物的透明度
                     'hatch_patterns': ['/', '\\', '|', '-', '+', 'x', 'o', 'O']
                 }
+            },
+            'core': {
+                'plot_index_list': [],  # 岩心数据绘制在哪几道[3, 4]
+                'core_curves': [],  # 岩心测井曲线为datalogging的哪几道['Core_data1', 'Core_data2']
+                'thicknesses_config': [],  # 线宽设置，线的粗细设置
+                'colors_config': [],  # 岩心数据颜色设置
+                'axis_config': [],  # 坐标轴是否log配置
+                'range_config': [],  # 岩心数据上下范围设置，用来进行缩放用的
             }
         }
 
@@ -1017,6 +1131,14 @@ class LoggingDataManager:
         legend_count = len(type_config['legend_dict'])
         logger.info(f"🎨 岩性分类配置: {types_count} 个分类列, {legend_count} 个图例项")
 
+        # 岩心数据配置统计（无独立面板，仅记录配置信息）
+        core_config = configs.get('core', {})
+        core_curves_count = len(core_config.get('core_curves', []))
+        if core_curves_count > 0:
+            plot_indices = core_config.get('plot_index_list', [])
+            colors = core_config.get('colors_config', [])
+            logger.info(f"🔹 岩心杆状图配置: {core_curves_count} 个岩心曲线 -> 道 {plot_indices}")
+
         logger.info("所有配置验证通过，准备进行可视化")
 
     def get_logging_resolution(self):
@@ -1043,6 +1165,10 @@ class LoggingDataManager:
             self.n_nmr_panels = len(self.nmr_data['nmr_data']) if 'nmr_data' in self.nmr_data and self.nmr_data['nmr_data'] else 0
         else:
             self.n_nmr_panels = 0
+
+        # ========== 岩心实验数据：不占用独立面板 ==========
+        # 岩心数据以杆状图叠加绘制在已有道上，cal_plot_num 仅统计独立面板数量
+        # self.n_core_panels = 0  # 岩心无独立面板，保持返回值兼容
 
         return self.n_curve_panels, self.n_type_panels, self.n_fmi_panels, self.n_nmr_panels
 
