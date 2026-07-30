@@ -5,8 +5,6 @@ from matplotlib import font_manager as fm
 import os
 import warnings
 
-from src_plot.plot_heatmap import plot_clustering_heatmap
-
 # 忽略特定警告
 warnings.filterwarnings("ignore", category=UserWarning)
 

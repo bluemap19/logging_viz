@@ -1,13 +1,13 @@
 from src_fmi.fmi_data_read import get_ele_data_from_path
 import numpy as np
-from scipy import interpolate
+from scipy import interpolate, ndimage
 from scipy.ndimage import distance_transform_edt
 import cv2
+
 from src_fmi.fmi_data_save import fmi_data_save
-from src_fmi.image_operation import show_Pic
+from src_fmi.fmi_pyrite_content import count_target_areas
 from src_plot.well_logging_viz.data_manager import LoggingDataManager
 from src_plot.well_logging_viz.data_visulization import WellLogVisualizer
-
 
 
 def repair_image(input_image, mask, method='inpainting', telea_radius=5, ns_radius=2):
@@ -115,63 +115,101 @@ def repair_image(input_image, mask, method='inpainting', telea_radius=5, ns_radi
 
     else:
         raise ValueError(
-            f"未知的修复方法: {method}，可选值为:'inpainting'、'telea'、'ns'、'hybrid'、'interpolation'、'nearest'、'column_based'、'row_based'")
+            f"未知的修复方法: {method}，可选值为{'inpainting' / 'telea' / 'ns' / 'hybrid' / 'interpolation' / 'nearest' / 'column_based' / 'row_based'}")
 
     return repaired_image
 
+def get_mask_from_dyna_by_pinned_pixel(dyna_image=np.array([]), pinned_pixel=25):
+    """
+    通过固定的像素值获取图像dyna_image的mask
+    """
+    # # 固定阈值 T = 128
+    # T = 128
+    # _, binary = cv2.threshold(gray, T, 255, cv2.THRESH_BINARY)
+    # # 反转：小于 T 的设为前景（适合暗目标在亮背景上）
+    # _, binary_inv = cv2.threshold(gray, T, 255, cv2.THRESH_BINARY_INV)
+
+    mask_dyna = cv2.threshold(dyna_image, pinned_pixel, 255, cv2.THRESH_BINARY)[1]
+
+    area_limit = 200
+    width_limit = 40
+    height_limit = 40
+    perimeter_range = (0.0, 10 ** 6)
+    area_perimeter_ratio_range = (0.0, 20)
+
+    total_pixels, target_mask = count_target_areas(mask_dyna, target_config={
+        'area_range': (1, area_limit),
+        'width_range': (0, width_limit),
+        'height_range': (0, height_limit),
+        'perimeter_range': perimeter_range,
+        'area_perimeter_ratio_range': area_perimeter_ratio_range,
+        # 一般是 height_range/4 或者是 width_range/4 ，范围越小越接近长条形状，裂缝形状，越大越接近圆形
+    })
+
+    # 1. 定义结构元素（kernel / 算子）
+    kernel = cv2.getStructuringElement(
+        shape=cv2.MORPH_RECT,  # 形状：RECT 矩形 / ELLIPSE 椭圆 / CROSS 十字
+        ksize=(7, 7)  # 大小：奇数，越大作用越强
+    )
+
+    # # 2. 开运算
+    # target_mask = cv2.morphologyEx(target_mask, cv2.MORPH_OPEN, kernel)
+
+    # 3. 闭运算
+    target_mask = cv2.morphologyEx(target_mask, cv2.MORPH_CLOSE, kernel)
+
+    return mask_dyna, target_mask
+
 
 if __name__ == '__main__':
-    # dyna_image, depth_dyna = get_ele_data_from_path(strname=r'Z:\logging_workspace\塬22\塬22_FMI_DYNA.txt')
-    # mask, _ = get_ele_data_from_path(strname=r'Z:\logging_workspace\塬22\target_mask.txt')
-    dyna_image, depth_dyna = get_ele_data_from_path(strname='Z:\logging_workspace\姬119H2\姬119H2_FMI_DYNA.txt')
-    mask, _ = get_ele_data_from_path(strname=r'Z:\logging_workspace\姬119H2\target_mask.txt')
-    print(dyna_image.shape, mask.shape)           # (23632, 360)
-
+    stat_image, depth_stat = get_ele_data_from_path(strname=r'Z:\logging_workspace\姬119H2\姬119H2_FMI_STAT.txt')
+    dyna_image, depth_dyna = get_ele_data_from_path(strname=r'Z:\logging_workspace\姬119H2\姬119H2_FMI_DYNA.txt')
+    # mask_target, depth_mask = get_ele_data_from_path(strname=r'Z:\logging_workspace\姬119H2\target_mask.txt')
+    mask_origin, mask_target = get_mask_from_dyna_by_pinned_pixel(dyna_image=dyna_image, pinned_pixel=128)
     print(f"原始图像形状: {dyna_image.shape}")
-    print(f"掩膜形状: {mask.shape}")
-    print(f"需要修复的像素数量: {np.sum(mask > 0)}")
+    print(f"掩膜形状: {mask_target.shape}")
+    print(f"需要修复的像素数量: {np.sum(mask_target > 0)}")
 
-    # 方法1: 使用OpenCV的TELEA算法（推荐）
-    repaired1 = repair_image(dyna_image, mask, method='telea')
+    # 计算还剩下多少个连通区域
+    structure = np.ones((3, 3), dtype=np.int32)
+    labeled_array, num_features = ndimage.label(mask_target, structure=structure)
+    print(f"剩余 {num_features} 个连通区域")
 
-    # 方法2: 使用混合修复方法（适合测井数据）
-    repaired2 = repair_image(dyna_image, mask, method='hybrid')
+    # 方法1: Telea单算法修复
+    repaired_telea = repair_image(dyna_image, mask_target, method='telea', telea_radius=5)
 
-    # 方法3: 基于列的插值（特别适合测井数据）
-    repaired3 = repair_image(dyna_image, mask, method='column_based')
+    # 方法2: 【新增】两阶段级联修复（Hybrid）
+    repaired_hybrid = repair_image(dyna_image, mask_target, method='hybrid', telea_radius=5, ns_radius=2)
 
-    # show_Pic(pic_list=[dyna_image[:1000, :], mask[:1000, :], repaired1[:1000, :], repaired2[:1000, :], repaired3[:1000, :]], pic_order='15')
+    # 方法3: 列方向插值（测井数据首选）
+    repaired_column_based = repair_image(dyna_image, mask_target, method='column_based')
+
+    # 方法4: ns
+    repaired_ns = repair_image(dyna_image, mask_target, method='ns')
+
+    # 可视化对比
     LDM = LoggingDataManager(
-        fmi_data={'depth': depth_dyna, 'image_data': [255-dyna_image, 255-mask, 255-repaired1, 255-repaired2, 255-repaired3]},
+        fmi_data={'depth': depth_dyna, 'image_data': [
+            255 - stat_image,
+            255 - dyna_image,
+            255 - mask_origin,
+            255 - mask_target,
+            255 - repaired_ns,
+            255 - repaired_telea,
+            255 - repaired_hybrid,
+            255 - repaired_column_based
+        ]},
     )
-    print('plot depth limits is :', LDM._get_depth_limits())
-
-    well_viewer = WellLogVisualizer(LDM,
-        # config_logging={'curves_plot' : ['GR', 'DWMG_INCP', 'DWFE_INCP', 'DWCA_INCP', 'DWAL_INCP', 'DWSI_INCP', 'ILLITE_QE', 'PYRITE_ORG']},
-        # config_type = {'types_cols': 'auto'},
-        config_fmi = {'color_map': 'hot', 'title_fmi': ['FMI_DYNA', 'FMI_DYNA_MASK', 'FMI_TELEA', 'FMI_HYBRID', 'FMI_COLUMN']}
+    well_viewer = WellLogVisualizer(
+        LDM,
+        config_fmi={
+            'color_map': 'hot',
+            'title_fmi': ['原始静态FMI', '原始动态FMI', '完整缺损掩膜', '目标缺损掩膜', 'NS修复', 'Telea修复', 'Hybrid级联修复', '列插值修复']
+        }
     )
-    config_logging, config_fmi, config_nmr, config_type = well_viewer.get_plot_config()
-    print(config_logging, '\n', config_fmi, '\n', config_nmr, '\n', config_type)
     well_viewer.visualize()
 
-    # fmi_data_save(
-    #     save_path=r'Z:\logging_workspace\姬119H2\姬119H2_FMI_DYNA_TELEA.txt',
-    #     img_data=repaired1,
-    #     depth_data=depth_dyna,
-    #     header_lines=None
-    # )
-    # fmi_data_save(
-    #     save_path=r'Z:\logging_workspace\姬119H2\姬119H2_FMI_DYNA_HYBRID.txt',
-    #     img_data=repaired2,
-    #     depth_data=depth_dyna,
-    #     header_lines=None
-    # )
-    # fmi_data_save(
-    #     save_path=r'Z:\logging_workspace\姬119H2\姬119H2_FMI_DYNA_COLUMN.txt',
-    #     img_data=repaired3,
-    #     depth_data=depth_dyna,
-    #     header_lines=None
-    # )
-
-    
+    # # 保存结果
+    # fmi_data_save(r'F:\logging_workspace\姬119H2\姬119H2_FMI_DYNA_TELEA.txt', repaired1, depth_dyna)
+    # fmi_data_save(r'F:\logging_workspace\姬119H2\姬119H2_FMI_DYNA_HYBRID.txt', repaired2, depth_dyna)
+    # fmi_data_save(r'F:\logging_workspace\姬119H2\姬119H2_FMI_DYNA_COLUMN.txt', repaired3, depth_dyna)

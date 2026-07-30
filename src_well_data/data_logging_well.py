@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from src_data_process.data_depth_delete import process_depth_segment
 from src_data_process.data_linear_regression import MultiVariateLinearRegressor
 from src_file_op.dir_operation import search_files_by_criteria
-from src_logging.logging_combine import data_combine_table2col
+from src_logging.logging_combine import combine_logging_table
 from src_well_data.data_logging_FMI import DataFMI
 from src_well_data.data_logging_normal import DataLogging
 from src_well_data.data_logging_table import DataTable
@@ -48,7 +48,7 @@ class DATA_WELL:
         self.LOGGING_KW = ['logging']
         self.TABLE_KW = ['table', 'LITHO_TYPE']
         self.FMI_KW = ['DYNA', 'STAT']
-        self.NMR_KW = ['nmr']
+        self.NMR_KW = ['NMR']
 
         # 初始化路径扫描
         self.scan_files()
@@ -86,7 +86,7 @@ class DATA_WELL:
         self.path_list_nmr = search_files_by_criteria(
             self.well_path,
             name_keywords=self.NMR_KW,
-            file_extensions=['.csv'],
+            file_extensions=['.csv', '.txt'],
             all_keywords=False
         )
 
@@ -307,6 +307,7 @@ class DATA_WELL:
             replace_dict=None,
             new_col='Type',
             norm=False,
+            tolerance=0.5,          #
     ):
         """
         将连续曲线logging与类型表（3列或2列）合并
@@ -334,7 +335,7 @@ class DATA_WELL:
         table_columns = list(df_tab.columns)
         array_logging = df_log.values.astype(np.float32)
         array_table = df_tab.values.astype(np.float32)
-        array_merge = data_combine_table2col(array_logging, array_table, drop=True)
+        array_merge = combine_logging_table(array_logging, array_table, drop=True, tolerance=tolerance)
 
         data_columns = logging_columns + [table_columns[-1]]
         df_merge = pd.DataFrame(array_merge, columns=data_columns)

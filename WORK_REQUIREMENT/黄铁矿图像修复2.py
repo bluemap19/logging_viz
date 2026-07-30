@@ -120,8 +120,8 @@ def repair_image(input_image, mask, method='inpainting', telea_radius=5, ns_radi
 
 
 if __name__ == '__main__':
-    dyna_image, depth_dyna = get_ele_data_from_path(strname=r'F:\logging_workspace\姬119H2\姬119H2_FMI_DYNA.txt')
-    mask, _ = get_ele_data_from_path(strname=r'F:\logging_workspace\姬119H2\target_mask.txt')
+    dyna_image, depth_dyna = get_ele_data_from_path(strname=r'Z:\logging_workspace\姬119H2\姬119H2_FMI_DYNA.txt')
+    mask, depth_mask = get_ele_data_from_path(strname=r'Z:\logging_workspace\姬119H2\target_mask.txt')
     print(f"原始图像形状: {dyna_image.shape}")
     print(f"掩膜形状: {mask.shape}")
     print(f"需要修复的像素数量: {np.sum(mask > 0)}")

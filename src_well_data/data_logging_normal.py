@@ -289,7 +289,7 @@ class DataLogging:
 
             elif file_format == FileFormat.EXCEL:
                 # 确定工作表名称
-                sheet_name = table_name or self._logging_name or 0
+                sheet_name = 0
                 self._data = pd.read_excel(file_path, sheet_name=sheet_name)
             elif file_format == FileFormat.TEXT:
                 # TXT文件通常为LAS格式，跳过前几行头信息

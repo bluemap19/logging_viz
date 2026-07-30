@@ -9,14 +9,14 @@ from src_fmi.segmentation import FMISegmentation
 
 
 # 多张fmi同时计算 texture-feature
-def cal_fmis_segmentation(imgs=[], depth=np.array([]), windows=100, step=50, method_configs={
-        ('tophat_otsu', 'TopHat + Otsu', None),
-        ('otsu', 'Otsu Threshold', None),
-        ('adaptive', 'Adaptive Threshold', None),
-        ('kmeans', 'K-means (K=3)', None),
-        ('gmm', 'GMM (n=3)', None),
-        ('wavelet', 'Wavelet (db4)', None),
-    }):
+def cal_fmis_segmentation(imgs=[], depth=np.array([]), windows=100, step=50, post_method=['open', 'close', ], method_configs=[
+        ('tophat_otsu', None),
+        ('otsu', None),
+        ('adaptive', None),
+        ('kmeans', None),
+        ('gmm', None),
+        ('wavelet', None),
+    ]):
     # 确保图像的长度与深度列相对应，形状一致
     for img in imgs:
         assert img.shape[0] == depth.shape[0], "image 形状长度必须等于 depth长度"
@@ -54,8 +54,8 @@ def cal_fmis_segmentation(imgs=[], depth=np.array([]), windows=100, step=50, met
                 img = imgs[i]
                 window_img = copy.deepcopy(img[INDEX_START:INDEX_END, :])
 
-                for method, name, enhance in method_configs:
-                    mask = seg.segment(window_img, enhance_method=enhance, seg_method=method)
+                for method, enhance in method_configs:
+                    mask = seg.segment(window_img, enhance_method=enhance, seg_method=method, post_method=post_method)
                     segmentation_result[method][i][INDEX_START:INDEX_END, :] += mask
 
             pbar.update(1)

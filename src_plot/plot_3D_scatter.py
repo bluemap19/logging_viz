@@ -96,59 +96,6 @@ def plot_3d_pca(df, title="3D PCA Visualization", figsize=(12, 10),
     return fig
 
 
-# 高级接口：支持交互式旋转
-# def interactive_3d_pca(df, title="Interactive 3D PCA Visualization", XYZ=['PCA1', 'PCA2', 'PCA3'], Type='Type',
-#                        figsize=(14, 12), point_size=15, alpha=0.7):
-#     """
-#     交互式3D PCA可视化 (使用Plotly)
-#
-#     参数:
-#     df: DataFrame, 必须包含['PCA1', 'PCA2', 'PCA3', 'Type']列
-#     title: 图表标题
-#     figsize: 图表尺寸 (仅影响静态导出)
-#     point_size: 点大小
-#     alpha: 点透明度
-#
-#     返回:
-#     plotly Figure对象
-#     """
-#     try:
-#         import plotly.express as px
-#     except ImportError:
-#         raise ImportError("使用交互式可视化需要安装plotly: pip install plotly")
-#
-#     # 验证输入
-#     required_cols = XYZ + [Type]
-#     if not all(col in df.columns for col in required_cols):
-#         raise ValueError(f"DataFrame必须包含列: {required_cols}")
-#
-#     # 创建交互式图表
-#     fig = px.scatter_3d(
-#         df,
-#         x=XYZ[0],
-#         y=XYZ[1],
-#         z=XYZ[2],
-#         color=Type,
-#         title=title,
-#         size_max=point_size,
-#         opacity=alpha,
-#         width=figsize[0] * 100,
-#         height=figsize[1] * 100
-#     )
-#
-#     # 更新布局
-#     fig.update_layout(
-#         scene=dict(
-#             xaxis_title=XYZ[0],
-#             yaxis_title=XYZ[1],
-#             zaxis_title=XYZ[2]
-#         ),
-#         legend_title_text=Type,
-#         margin=dict(l=0, r=0, b=0, t=40)
-#     )
-#
-#     return fig
-
 # 我对您的交互式3D PCA可视化函数进行了全面的美观优化，提升了视觉效果和用户体验：
 def interactive_3d_pca(df, title="Interactive 3D PCA Visualization",
                                   XYZ=['PCA1', 'PCA2', 'PCA3'], Type='Type',
@@ -350,8 +297,8 @@ if __name__ == '__main__':
         title="Interactive PCA Visualization",
         XYZ=['PCA1', 'PCA2', 'PCA3'],
         Type='Type',
-        point_size=10,
-        alpha=0.7,
+        point_size=2,
+        alpha=0.9,
     )
     interactive_fig.show()
 

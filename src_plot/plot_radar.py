@@ -186,5 +186,5 @@ if __name__ == "__main__":
         title='技术团队技能评估雷达图 (无归一化)',
         norm=True
     )
-    plt.savefig('radar_charts.png', dpi=300, bbox_inches='tight')
+    # plt.savefig('radar_charts.png', dpi=300, bbox_inches='tight')
     plt.show()

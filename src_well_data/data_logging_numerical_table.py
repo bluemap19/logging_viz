@@ -1,3 +1,4 @@
+import os
 import warnings
 import numpy as np
 import pandas as pd
@@ -14,8 +15,8 @@ class TableFormat(Enum):
     定义支持的测井表格数据格式
     """
     UNKNOWN = 0          # 未知格式
-    DEPTH_TYPE = 1       # 深度-类型格式 (n×2)
-    START_END_TYPE = 2   # 开始深度-截止深度-类型格式 (n×3)
+    DEPTH_DATA = 1       # 深度-类型格式 (n×2)
+    START_END_DATA = 2   # 开始深度-截止深度-类型格式 (n×3)
 
 
 class DataTableException(Exception):
@@ -26,17 +27,15 @@ class DataTableException(Exception):
     pass
 
 
-class DataTable:
+class DataTableNumercial:
     """
     测井表格管理核心类
 
     功能概述：
     1. 支持两种测井数据格式的读取和互转：
-       - 深度-类型格式（n×2）：深度值、岩性类型
-       - 开始深度-截止深度-类型格式（n×3）：开始深度、截止深度、岩性类型
-    2. 自动检测和验证数据格式完整性
-    3. 支持类型编码的替换映射
-    4. 提供统一的数据访问接口
+       - 深度-类型格式（n×m）：深度值、岩心实验结果
+       - 开始深度-截止深度-类型格式（n×3）：开始深度、截止深度、岩心实验结果
+    2. 提供统一的数据访问接口
 
     设计原则：
     - 数据封装：内部数据状态受保护，通过方法访问
@@ -44,7 +43,7 @@ class DataTable:
     - 异常安全：完善的错误处理和数据验证
     """
 
-    def __init__(self, path: str = '', well_name: str = '', resolution: float = 0.0025, table_formate:int = TableFormat.DEPTH_TYPE,):
+    def __init__(self, path: str = '', well_name: str = '', resolution: float = 0.0025, table_formate:int = TableFormat.DEPTH_DATA,):
         """
         初始化测井表格对象
 
@@ -52,24 +51,20 @@ class DataTable:
             path: 数据文件路径，支持.csv和.xlsx格式
             well_name: 井名标识，用于日志记录和数据标识
             resolution: 表格分辨率（深度采样间隔），单位：米，默认0.0025米
+            table_formate：表格类型
 
         Attributes:
-            _table_2: 存储原始的深度-类型格式数据（2列DataFrame）
-            _table_2_replaced: 存储类型替换后的深度-类型格式数据
-            _table_3: 存储原始的开始-截止-类型格式数据（3列DataFrame）
-            _table_3_replaced: 存储类型替换后的开始-截止-类型格式数据
+            _table_2: 存储原始的深度-岩心数据格式数据（2列DataFrame）
+            _table_3: 存储原始的开始-截止-岩心数据格式数据（3列DataFrame）
             _table_resolution: 数据分辨率参数
             _file_path: 源数据文件路径
             _well_name: 井名标识
             _raw_data: 从文件直接读取的原始数据（不做格式处理）
-            _replace_dict: 类型替换映射字典
             _is_data_loaded: 数据加载状态标志
         """
         # 数据存储属性
-        self._table_2: pd.DataFrame = pd.DataFrame()  # 深度-类型格式原始数据
-        self._table_2_replaced: pd.DataFrame = pd.DataFrame()  # 类型替换后的深度-类型数据
-        self._table_3: pd.DataFrame = pd.DataFrame()  # 开始-结束-类型格式原始数据
-        self._table_3_replaced: pd.DataFrame = pd.DataFrame()  # 类型替换后的开始-结束-类型数据
+        self._table_2: pd.DataFrame = pd.DataFrame()  # 深度-岩心数据格式原始数据
+        self._table_3: pd.DataFrame = pd.DataFrame()  # 开始-结束-岩心数据格式原始数据
 
         # 配置参数
         self._table_resolution: float = resolution  # 深度采样分辨率
@@ -78,15 +73,19 @@ class DataTable:
 
         # 原始数据和状态
         self._raw_data: pd.DataFrame = pd.DataFrame()  # 从文件读取的原始数据
-        self._replace_dict: Dict[Union[str, int], Union[str, int]] = {}  # 类型替换字典
         self._is_data_loaded: bool = False  # 数据是否已加载标志
+        self.table_formate = table_formate
 
         # 初始化日志系统
         self._logger = self._setup_logger()
 
+
+        if not os.path.exists(self._file_path):
+            self._logger.error('file_path {} does not exist!'.format(self._file_path))
+
         # 列名常量定义 - 确保整个类中列名使用的一致性
-        self.COLUMN_NAMES_2 = ['Depth', 'Type']  # 2列表格的列名
-        self.COLUMN_NAMES_3 = ['Depth_Start', 'Depth_End', 'Type']  # 3列表格的列名
+        self.COLUMN_NAMES_2 = []  # 2列表格的列名
+        self.COLUMN_NAMES_3 = []  # 3列表格的列名
 
     def _setup_logger(self) -> logging.Logger:
         """
@@ -114,44 +113,13 @@ class DataTable:
 
         return logger
 
-    def _detect_table_format(self, data: pd.DataFrame) -> TableFormat:
-        """
-        自动检测输入数据的表格格式
-
-        Args:
-            data: 待检测的DataFrame数据
-
-        Returns:
-            TableFormat: 检测到的表格格式枚举值
-
-        Raises:
-            DataTableException: 当数据格式不支持时抛出异常
-
-        Logic:
-            - 2列 → DEPTH_TYPE格式
-            - 3列 → START_END_TYPE格式
-            - ≥4列 → 使用前3列，按START_END_TYPE处理
-            - 其他 → 抛出格式不支持异常
-        """
-        if data.shape[1] == 2:
-            return TableFormat.DEPTH_TYPE
-        elif data.shape[1] == 3:
-            return TableFormat.START_END_TYPE
-        elif data.shape[1] >= 4:
-            self._logger.warning(f"检测到{data.shape[1]}列数据，使用前3列作为开始-结束-类型格式")
-            return TableFormat.START_END_TYPE
-        else:
-            raise DataTableException(f"不支持的表格格式: {data.shape[1]}列")
-
-    def read_data(self, file_path: str = '', table_name: str = '',
-                  force_format: Optional[TableFormat] = None) -> None:
+    def read_data(self, file_path: str = '', table_format: Optional[TableFormat] = None) -> None:
         """
         读取测井数据文件的主入口方法
 
         Args:
             file_path: 数据文件路径，为空时使用对象初始化路径
-            table_name: 表格名称（主要用于Excel的sheet名）
-            force_format: 强制指定表格格式，为None时自动检测
+            table_format: 强制指定表格格式，为None时自动检测
 
         Raises:
             DataTableException: 文件读取失败、数据为空或格式处理异常时抛出
@@ -181,15 +149,11 @@ class DataTable:
                 raise DataTableException("读取到的数据为空")
 
             # 步骤3: 处理数据格式识别和转换
-            self._process_data_format(force_format)
-
-            # 步骤4: 从数据中提取类型替换字典
-            self._extract_replace_dict()
+            self._process_data_format(table_format)
 
             # 步骤5: 更新数据加载状态
             self._is_data_loaded = True
-            detected_format = self._detect_table_format(self._raw_data)
-            self._logger.info(f"成功加载数据，格式: {detected_format.name}")
+            self._logger.info(f"成功加载数据，格式: {table_format.name}")
 
         except Exception as e:
             self._logger.error(f"读取数据失败: {str(e)}")
@@ -231,32 +195,30 @@ class DataTable:
         else:
             raise DataTableException(f"不支持的文件格式: {file_path}")
 
-    def _process_data_format(self, force_format: Optional[TableFormat] = None) -> None:
+    def _process_data_format(self, table_format: Optional[TableFormat] = None) -> None:
         """
         处理数据格式识别和相应的初始化转换
 
         Args:
-            force_format: 强制指定的格式，为None时自动检测
+            table_format: 强制指定的格式，为None时自动检测
         """
         # 确定数据格式（强制格式或自动检测）
-        format_type = force_format or self._detect_table_format(self._raw_data)
+        if table_format is not None:
+            format_type = table_format
+        else:
+            format_type = self.table_formate
 
-        if format_type == TableFormat.DEPTH_TYPE:
+        if format_type == TableFormat.DEPTH_DATA:
             # 处理2列格式数据
-            self._table_2 = self._raw_data.iloc[:, :2].copy()  # 取前2列
-            self._table_2.columns = self.COLUMN_NAMES_2  # 设置标准列名
+            self._table_2 = self._raw_data.copy()
             self._check_table_2()  # 数据完整性检查
 
             # 自动计算分辨率
-            self._table_resolution = get_resolution_by_depth(self._table_2['Depth'].values)
+            self._table_resolution = get_resolution_by_depth(self._table_2.iloc[:, 0].values)
 
-            # 转换为3列格式（惰性转换，只在需要时进行）
-            self._convert_2_to_3()
-
-        elif format_type == TableFormat.START_END_TYPE:
+        elif format_type == TableFormat.START_END_DATA:
             # 处理3列格式数据
-            self._table_3 = self._raw_data.iloc[:, :3].copy()  # 取前3列
-            self._table_3.columns = self.COLUMN_NAMES_3  # 设置标准列名
+            self._table_3 = self._raw_data.copy()
             self._check_table_3()  # 数据完整性检查
 
             # 如果分辨率未设置或无效，使用默认值
@@ -285,7 +247,7 @@ class DataTable:
             raise DataTableException("深度-类型表格数据为空")
 
         # 检查2: 列数是否正确
-        if self._table_2.shape[1] != 2:
+        if self._table_2.shape[1] < 2:
             raise DataTableException(f"深度-类型表格应为2列，实际为{self._table_2.shape[1]}列")
 
         # 检查3: 空值处理
@@ -296,13 +258,15 @@ class DataTable:
             self._table_2 = self._table_2.dropna().reset_index(drop=True)
 
         # 检查4: 深度单调性验证
-        depths = self._table_2['Depth'].values
+        depths = self._table_2.iloc[:, 0].values  # 第一列永远是深度列
         if len(depths) > 1:
             depth_diffs = np.diff(depths)
             if not np.all(depth_diffs > 0):
                 # 找到非递增的位置
                 non_increasing_indices = np.where(depth_diffs <= 0)[0]
                 raise DataTableException(f"深度值非单调递增，问题位置: {non_increasing_indices}")
+
+        self.COLUMN_NAMES_2 = self._table_2.columns.tolist()
 
     def _check_table_3(self) -> None:
         """
@@ -323,7 +287,7 @@ class DataTable:
             raise DataTableException("开始-结束-类型表格数据为空")
 
         # 检查2: 列数验证
-        if self._table_3.shape[1] != 3:
+        if self._table_3.shape[1] < 3:
             raise DataTableException(f"开始-结束-类型表格应为3列，实际为{self._table_3.shape[1]}列")
 
         # 检查3: 空值处理
@@ -334,8 +298,8 @@ class DataTable:
             self._table_3 = self._table_3.dropna().reset_index(drop=True)
 
         # 检查4: 深度区间合法性（开始深度 < 结束深度）
-        depth_starts = self._table_3['Depth_Start'].values
-        depth_ends = self._table_3['Depth_End'].values
+        depth_starts = self._table_3.iloc[:, 0].values
+        depth_ends = self._table_3.iloc[:, 1].values
 
         invalid_intervals = depth_starts > depth_ends
         if invalid_intervals.any():
@@ -351,20 +315,8 @@ class DataTable:
                         f"行{i + 1}开始深度{depth_starts[i + 1]}"
                     )
 
-    def _convert_2_to_3(self) -> None:
-        """
-        将深度-类型格式(2列)转换为开始-结束-类型格式(3列)
+        self.COLUMN_NAMES_3 = self._table_3.columns.tolist()
 
-        Note:
-            - 只有在_table_3为空且_table_2不为空时才执行转换
-            - 转换结果存储在_table_3中
-        """
-        if self._table_3.empty and not self._table_2.empty:
-            # 调用转换函数，将DataFrame转换为numpy数组进行转换
-            table_3_array = table_2_to_3(self._table_2.values)
-            # 将转换结果重新封装为DataFrame
-            self._table_3 = pd.DataFrame(table_3_array, columns=self.COLUMN_NAMES_3)
-            self._logger.debug("完成2列到3列表格转换")
 
     def _convert_3_to_2(self, resolution: Optional[float] = None) -> None:
         """
@@ -382,38 +334,19 @@ class DataTable:
             resolution = resolution or self._table_resolution
             # 调用转换函数
             table_2_array = table_3_to_2(self._table_3.values, step=resolution)
+
+            self.COLUMN_NAMES_2 = [r'DEP_START', r'DEP_END'] + list(table_2_array.columns)[1:]
             # 将转换结果重新封装为DataFrame
             self._table_2 = pd.DataFrame(table_2_array, columns=self.COLUMN_NAMES_2)
             self._logger.debug("完成3列到2列表格转换")
 
-    def _extract_replace_dict(self) -> None:
-        """
-        从原始数据中提取类型替换字典
-
-        Logic:
-            - 取原始数据的最后一列（类型列）
-            - 提取唯一值生成替换映射
-            - 如果提取失败，使用空字典并记录警告
-        """
-        try:
-            if not self._raw_data.empty:
-                # 假设最后一列为类型列
-                type_column = self._raw_data.iloc[:, -1]
-                self._replace_dict = get_replace_dict(type_column.values)
-        except Exception as e:
-            self._logger.warning(f"提取替换字典失败: {e}")
-            self._replace_dict = {}  # 使用空字典作为fallback
-
     def get_table_2(self, curve_names: Optional[List[str]] = None) -> pd.DataFrame:
         """
         获取深度-类型格式(2列)数据
-
         Args:
             curve_names: 指定返回的列名列表，为None时返回所有列
-
         Returns:
             深度-类型格式的DataFrame（2列）
-
         Workflow:
             1. 如果数据未加载，先读取数据
             2. 如果2列数据为空，从3列数据转换
@@ -433,94 +366,6 @@ class DataTable:
 
         # 默认返回深度列和类型列
         return self._table_2.iloc[:, [0, -1]]
-
-    def get_table_2_replaced(self, curve_names: Optional[List[str]] = None) -> pd.DataFrame:
-        """
-        获取类型替换后的深度-类型格式数据
-
-        Args:
-            curve_names: 指定返回的列名列表
-
-        Returns:
-            类型替换后的深度-类型格式DataFrame
-        """
-        self.get_table_2()
-
-        # 惰性替换：如果替换数据为空，应用类型替换
-        if self._table_2_replaced.empty:
-            self._apply_type_replacement()
-
-        if curve_names and len(curve_names) == 2:
-            return self._table_2_replaced[curve_names]
-
-        return self._table_2_replaced.iloc[:, [0, -1]]
-
-    def get_table_3(self, curve_names: Optional[List[str]] = None) -> pd.DataFrame:
-        """
-        获取开始-结束-类型格式(3列)数据
-
-        Args:
-            curve_names: 指定返回的列名列表
-
-        Returns:
-            开始-结束-类型格式的DataFrame（3列）
-        """
-        if not self._is_data_loaded:
-            self.read_data()
-
-        if self._table_3.empty:
-            self._convert_2_to_3()
-
-        if curve_names and len(curve_names) == 3:
-            return self._table_3[curve_names]
-
-        return self._table_3.iloc[:, [0, 1, -1]]
-
-    def get_table_3_replaced(self, curve_names: Optional[List[str]] = None) -> pd.DataFrame:
-        """
-        获取类型替换后的开始-结束-类型格式数据
-
-        Args:
-            curve_names: 指定返回的列名列表
-
-        Returns:
-            类型替换后的开始-结束-类型格式DataFrame
-        """
-        self.get_table_3()
-
-        if self._table_3_replaced.empty:
-            self._apply_type_replacement()
-
-        if curve_names and len(curve_names) == 3:
-            return self._table_3_replaced[curve_names]
-
-        return self._table_3_replaced.iloc[:, [0, 1, -1]]
-
-    def _apply_type_replacement(self, replace_dict: Optional[Dict] = None,
-                                new_col: str = 'Type_Replaced') -> None:
-        """
-        应用类型替换到2列和3列数据
-
-        Args:
-            replace_dict: 替换字典，为None时使用对象字典
-            new_col: 新类型列的列名
-        """
-        replace_dict = replace_dict or self._replace_dict
-        if not replace_dict:
-            self._logger.warning("替换字典为空，跳过类型替换")
-            return
-
-        # 应用替换到2列表格：创建副本并添加替换列
-        self._table_2_replaced = self._table_2.copy()
-        self._table_2_replaced[new_col] = self._table_2.iloc[:, -1].map(
-            lambda x: replace_dict.get(x, x)  # 如果找不到映射，使用原值
-        )
-
-        # 应用替换到3列表格
-        self._table_3_replaced = self._table_3.copy()
-        self._table_3_replaced[new_col] = self._table_3.iloc[:, -1].map(
-            lambda x: replace_dict.get(x, x)
-        )
 
     def set_resolution(self, resolution: float) -> None:
         """
@@ -555,12 +400,8 @@ class DataTable:
             'is_loaded': self._is_data_loaded,
             'table_2_rows': len(self._table_2),
             'table_3_rows': len(self._table_3),
-            'replace_dict_size': len(self._replace_dict)
         }
 
-    def get_replace_dict(self):
-        self.read_data()
-        return self._replace_dict
 
 
 def user_specific_test():
@@ -574,9 +415,9 @@ def user_specific_test():
     # 用户提供的测试用例
     test_cases = [
         {
-            'path': r'F:\logging_workspace\FY1-15\FY1-15_LITHO_TYPE.csv',
-            'well_name': 'FY1-15',
-            'description': 'FY1-15井岩性类型数据'
+            'path': r'Z:\logging_workspace\姬119H2\姬119H2导眼井全岩实验数据_table.csv',
+            'well_name': '姬119H2',
+            'description': '姬119H2井岩性类型数据'
         }
     ]
 
@@ -588,30 +429,14 @@ def user_specific_test():
 
         try:
             # 创建DataTable实例
-            test_table = DataTable(
+            test_table = DataTableNumercial(
                 path=test_case['path'],
                 well_name=test_case['well_name']
             )
 
-            # 执行用户要求的测试序列
-            print(">>> 3列表格数据统计:")
-            table_3_data = test_table.get_table_3()
-            print(table_3_data.describe())
-
             print("\n>>> 2列表格数据统计:")
             table_2_data = test_table.get_table_2()
             print(table_2_data.describe())
-
-            print("\n>>> 2列表格替换后数据(前10行):")
-            table_2_replaced = test_table.get_table_2_replaced()
-            print(table_2_replaced.head(10))
-
-            print("\n>>> 3列表格替换后数据统计:")
-            table_3_replaced = test_table.get_table_3_replaced()
-            print(table_3_replaced.describe())
-
-            print("\n>>> 替换字典内容:")
-            print(test_table._replace_dict)
 
             print("\n>>> 数据摘要信息:")
             summary = test_table.get_summary()

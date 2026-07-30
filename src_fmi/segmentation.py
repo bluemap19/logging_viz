@@ -223,20 +223,25 @@ class FMISegmentation:
         # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
         processed = mask.copy()
-        
-        for op in operations:
-            if op == 'open':
-                processed = cv2.morphologyEx(processed, cv2.MORPH_OPEN, kernel)
-            elif op == 'close':
-                processed = cv2.morphologyEx(processed, cv2.MORPH_CLOSE, kernel)
-            elif op == 'dilate':
-                processed = cv2.dilate(processed, kernel, iterations=1)
-            elif op == 'erode':
-                processed = cv2.erode(processed, kernel, iterations=1)
+
+        if (operations is not None) and (type(operations) is list):
+            for op in operations:
+                if op == 'open':
+                    processed = cv2.morphologyEx(processed, cv2.MORPH_OPEN, kernel)
+                elif op == 'close':
+                    processed = cv2.morphologyEx(processed, cv2.MORPH_CLOSE, kernel)
+                elif op == 'dilate':
+                    processed = cv2.dilate(processed, kernel, iterations=1)
+                elif op == 'erode':
+                    processed = cv2.erode(processed, kernel, iterations=1)
+                else:
+                    raise ValueError('Operation not supported')
+        else:
+            pass
         
         return processed
     
-    def segment(self, image, enhance_method=None, seg_method=''):
+    def segment(self, image, enhance_method=None, seg_method='', post_method=['open', 'close']):
         """主分割流程"""
         gray = self.convert_to_grayscale(image)
         preprocessed = self.preprocess(gray, method=enhance_method)
@@ -266,7 +271,7 @@ class FMISegmentation:
         else:
             raise ValueError(f"Unknown method: {self.method}")
         
-        mask = self.postprocess(mask, kernel_size=3)
+        mask = self.postprocess(mask, kernel_size=3, operations=post_method)
         
         return mask
 
@@ -338,7 +343,7 @@ class SegmentationMetrics:
         }
 
 
-def process_image(image_path, output_dir, methods=None):
+def process_image(image_path, methods=None):
     """处理单张图像，测试多种方法"""
     if methods is None:
         methods = ['tophat_otsu', 'otsu', 'adaptive', 'kmeans', 'gmm', 'wavelet']
@@ -351,15 +356,6 @@ def process_image(image_path, output_dir, methods=None):
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image_name = Path(image_path).stem
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # 创建输出目录
-    mask_dir = Path(output_dir) / 'masks'
-    viz_dir = Path(output_dir) / 'visualizations'
-    metrics_dir = Path(output_dir) / 'metrics'
-    
-    mask_dir.mkdir(exist_ok=True)
-    viz_dir.mkdir(exist_ok=True)
-    metrics_dir.mkdir(exist_ok=True)
     
     results = {
         'image': image_name,
@@ -415,16 +411,11 @@ def process_image(image_path, output_dir, methods=None):
         seg = FMISegmentation(method=method, params=params)
         mask = seg.segment(image_rgb, enhance_method=enhance)
         
-        # 保存掩膜
-        mask_path = mask_dir / f'{image_name}_{method}.png'
-        # cv2.imwrite(str(mask_path), mask)
-        
         # 计算指标
         metrics_calc = SegmentationMetrics(gray, mask)
         metrics = metrics_calc.all_metrics()
         results['methods'][method] = {
             'metrics': metrics,
-            'mask_path': str(mask_path),
             'params': seg.results
         }
         
@@ -459,33 +450,20 @@ def process_image(image_path, output_dir, methods=None):
         axes[i].axis('off')
     
     plt.tight_layout()
-    viz_path = viz_dir / f'{image_name}_comparison.png'
-    # plt.savefig(str(viz_path), dpi=150, bbox_inches='tight')
     plt.show()
     plt.close()
-    
-    # # 保存指标
-    # metrics_path = metrics_dir / f'{image_name}_metrics.json'
-    # with open(metrics_path, 'w', encoding='utf-8') as f: json.dump(results, f, ensure_ascii=False, indent=2)
-    # print(f"[OK] 处理完成：{image_name}")
-    # print(f"  掩膜：{mask_dir}")
-    # print(f"  可视化：{viz_path}")
-    # print(f"  指标：{metrics_path}")
     
     return results
 
 
 
-
-
 def main():
     """主函数"""
-    project_dir = Path(r'C:\Users\Maple\.openclaw\workspace\coal_fmi_seam')
+    project_dir = Path(r'C:\Users\Maple\Desktop\test_imags')
     images_dir = project_dir
-    output_dir = project_dir / 'results'
     
     # 查找所有测试图像
-    test_images = sorted(list(images_dir.glob('test*.png')))
+    test_images = sorted(list(images_dir.glob('test*.*')))
     
     if len(test_images) == 0:
         print("X 未找到测试图像！")
@@ -501,31 +479,11 @@ def main():
     for image_path in test_images:
         results = process_image(
             image_path,
-            output_dir,
             methods=['tophat_otsu', 'otsu', 'adaptive', 'kmeans', 'gmm', 'wavelet']
         )
         if results:
             all_results.append(results)
-        # print()
-    
-    # # 生成总体报告
-    # if all_results:
-    #     print("=" * 70)
-    #     generate_summary_report(all_results, output_dir)
-    #
-    #     # 保存总体 JSON
-    #     summary_path = output_dir / 'summary.json'
-    #     with open(summary_path, 'w', encoding='utf-8') as f:
-    #         json.dump({
-    #             'total_images': len(test_images),
-    #             'timestamp': datetime.now().isoformat(),
-    #             'results': all_results
-    #         }, f, ensure_ascii=False, indent=2)
-    #
-    #     print("=" * 70)
-    #     print(f"[OK] All processing complete!")
-    #     print(f"[DIR] Results: {output_dir}")
-    #     print("=" * 70)
+
 
 
 if __name__ == '__main__':

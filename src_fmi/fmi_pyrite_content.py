@@ -2,9 +2,106 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage
 from typing import Tuple, List, Any, Dict
-
 from tqdm import trange
+from skimage.measure import regionprops
 
+def count_target_areas(
+    binary_image: np.ndarray,
+    target_config = {
+        'area_range': (1, 20),
+        'width_range': (0, 10**6),
+        'height_range': (0, 10**6),
+        'perimeter_range': (0.0, 10**6),
+        'area_perimeter_ratio_range': (0.0, 10**6),
+    }
+) -> Tuple[int, np.ndarray]:
+    """
+    统计二值图像中满足多种几何约束条件的目标区域
+
+    参数:
+    ----------
+    binary_image : np.ndarray
+        输入的二值图像，只包含0(背景)和255(前景)两种像素值
+    area_range : Tuple[int, int]
+        面积范围 (min_area, max_area)，单位：像素。
+        默认(1, 20) 等价于原 area_threshold=20 的语义（面积在1~20之间）
+    width_range : Tuple[int, int]
+        横向跨度范围 (min_width, max_width)，即连通区域边界框的列方向像素个数
+    height_range : Tuple[int, int]
+        纵向跨度范围 (min_height, max_height)，即连通区域边界框的行方向像素个数
+    perimeter_range : Tuple[float, float]
+        周长范围 (min_perimeter, max_perimeter)，基于 Crofton 公式的近似周长
+    area_perimeter_ratio_range : Tuple[float, float]
+        面积周长比范围 (min_ratio, max_ratio)，即 area / perimeter
+
+    返回:
+    ----------
+    total_target_pixels : int
+        所有满足条件目标区域的总像素数
+    target_mask : np.ndarray
+        目标区域掩码，与输入图像同大小，目标区域为255，其他为0
+    """
+    area_range, width_range, height_range, perimeter_range, area_perimeter_ratio_range = target_config['area_range'], target_config['width_range'], target_config['height_range'], target_config['perimeter_range'], target_config['area_perimeter_ratio_range']
+
+    assert len(binary_image.shape) == 2, f"输入图像必须是2维数组，当前维度: {binary_image.ndim}"
+
+    # 验证输入图像是否为二值图像
+    if not np.array_equal(np.unique(binary_image), np.array([0, 255])):
+        raise ValueError("输入图像必须是二值图像，只包含0和255两种值")
+
+    # 创建二值掩码(0和1)
+    binary_mask = (binary_image.astype(np.uint8) == 255)
+
+    # 8连通标记
+    structure = np.ones((3, 3), dtype=np.int32)
+    labeled_array, num_features = ndimage.label(binary_mask, structure=structure)
+
+    print(f"检测到 {num_features} 个连通区域")
+
+    if num_features == 0:
+        print("未检测到任何连通区域")
+        return 0, np.zeros_like(binary_image, dtype=np.uint8)
+
+    target_mask = np.zeros_like(binary_image, dtype=np.uint8)
+    total_target_pixels = 0
+
+    # 使用 regionprops 提取每个区域的几何属性
+    props = regionprops(labeled_array)
+
+    for prop in props:
+        area = prop.area
+
+        # 边界框: (min_row, min_col, max_row, max_col) —— max 是开区间
+        minr, minc, maxr, maxc = prop.bbox
+        height = maxr - minr   # 纵向跨度（行方向像素数）
+        width = maxc - minc    # 横向跨度（列方向像素数）
+
+        perimeter = prop.perimeter
+        # 面积周长比（周长为0时比值无意义，直接判为不满足）
+        if perimeter > 0:
+            ratio = area / perimeter
+            ratio_ok = min(area_perimeter_ratio_range) <= ratio <= max(area_perimeter_ratio_range)
+        else:
+            ratio_ok = False
+
+        # 综合判断所有约束条件（全部满足才标记为目标）
+        if (area_range[0] <= area <= area_range[1] and
+            width_range[0] <= width <= width_range[1] and
+            height_range[0] <= height <= height_range[1] and
+            perimeter_range[0] <= perimeter <= perimeter_range[1] and
+            ratio_ok):
+
+            region_mask = (labeled_array == prop.label)
+            target_mask[region_mask] = 255
+            total_target_pixels += area
+
+    print(f"目标区域总像素数: {total_target_pixels}")
+    # 计算还剩下多少个连通区域
+    structure = np.ones((3, 3), dtype=np.int32)
+    labeled_array, num_features = ndimage.label(target_mask, structure=structure)
+    print(f"剩余 {num_features} 个连通区域")
+
+    return total_target_pixels, target_mask
 
 def count_small_target_areas(
         binary_image: np.ndarray,
