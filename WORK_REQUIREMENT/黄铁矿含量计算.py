@@ -129,7 +129,7 @@ if __name__ == '__main__':
         # config_type = {'types_cols': 'auto'},   DWCA_INCP  DWFE_INCP  DWK_INCP  DWMG_INCP  DWMN_INCP  DWNA_INCP  DWSI_INCP  DWSU_INCP  DWTC_INCP  DWTIC_INCP  DWTOC_INCP  PYRITE_QE
         config_fmi = {'color_map': 'hot', 'title_fmi':['dyna', 'stat', 'mask', 'target_mask']}
     )
-    config_logging, config_fmi, config_nmr, config_type = well_viewer.get_plot_config()
+    config_logging, config_fmi, config_nmr, config_type, config_core = well_viewer.get_plot_config()
     print(config_logging, '\n', config_fmi, '\n', config_nmr, '\n', config_type)
 
     well_viewer.visualize(figsize=(24, 12))

@@ -726,6 +726,9 @@ class WellLogVisualizer:
             color = self.DEFAULT_CURVE_COLORS[i % len(self.DEFAULT_CURVE_COLORS)]
             if i < len(self.config_core.get('colors_config', [])):
                 color = self.config_core['colors_config'][i]
+            alpha = 1.0
+            if i < len(self.config_core.get('alphas_config', [])):
+                alpha = float(self.config_core['alphas_config'][i])
 
             # 获取范围配置（用于归一化）
             curve_min, curve_max = 0.0, 1.0
@@ -766,6 +769,7 @@ class WellLogVisualizer:
                     [depth, depth],
                     color=color,
                     linewidth=thickness,
+                    alpha=alpha,
                     solid_capstyle='round',
                     zorder=10  # 确保在曲线之上
                 )
@@ -814,6 +818,9 @@ class WellLogVisualizer:
             color = self.DEFAULT_CURVE_COLORS[i % len(self.DEFAULT_CURVE_COLORS)]
             if i < len(self.config_core.get('colors_config', [])):
                 color = self.config_core['colors_config'][i]
+            alpha = 1.0
+            if i < len(self.config_core.get('alphas_config', [])):
+                alpha = float(self.config_core['alphas_config'][i])
 
             curve_min, curve_max = 0.0, 1.0
             if i < len(self.config_core.get('range_config', [])):
@@ -861,6 +868,7 @@ class WellLogVisualizer:
                     # 复用已有线
                     line = existing_lines[line_idx]
                     line.set_data([x_start, x_start + x_width], [depth, depth])
+                    line.set_alpha(alpha)
                     line.set_visible(True)
                 else:
                     # 新建线
@@ -869,6 +877,7 @@ class WellLogVisualizer:
                         [depth, depth],
                         color=color,
                         linewidth=thickness,
+                        alpha=alpha,
                         solid_capstyle='round',
                         zorder=10
                     )
@@ -1433,7 +1442,7 @@ class WellLogVisualizer:
             raise  # 重新抛出异常
 
     def get_plot_config(self):
-        return self.config_logging, self.config_fmi, self.config_nmr, self.config_type
+        return self.config_logging, self.config_fmi, self.config_nmr, self.config_type, self.config_core
 
 
 if __name__ == '__main__':

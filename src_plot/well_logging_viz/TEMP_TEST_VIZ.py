@@ -89,27 +89,21 @@ if __name__ == '__main__':
     )
     print(LDM._get_depth_limits())
 
-    # ========== 岩心配置 ==========
-    config_core = {
-        'core_curves': ['CORE_GR', 'CORE_RT', 'CORE_DEN'],  # 3 个岩心曲线
-        'plot_index_list': [0, 0, 1],  # CORE_GR+CORE_RT 叠加在第0道，CORE_DEN 叠加在第1道
-        'thicknesses_config': [2.0, 2.5, 1.8],  # 杆粗细
-        'colors_config': ['#FF6347', '#4169E1', '#32CD32'],  # 橙红、蓝、蓝绿
-        'axis_config': [False, False, False],  # 不使用对数轴
-        'range_config': [
-            [0, 150],  # CORE_GR 范围
-            [0.5, 500],  # CORE_RT 范围
-            [1.8, 3.0]  # CORE_DEN 范围
-        ]
-    }
-    # config_core = {}
-
-    index_type = data_logging.columns.to_list().index('Type')
-    data_logging.iloc[3, index_type] = None
-    data_logging.iloc[9, index_type] = None
-    data_logging.iloc[12, index_type] = None
-    data_logging.iloc[14, index_type] = None
-    data_logging.iloc[58, index_type] = None
+    # # ========== 岩心配置 ==========
+    # config_core = {
+    #     'core_curves': ['CORE_GR', 'CORE_RT', 'CORE_DEN'],  # 3 个岩心曲线
+    #     'plot_index_list': [0, 0, 1],  # CORE_GR+CORE_RT 叠加在第0道，CORE_DEN 叠加在第1道
+    #     'thicknesses_config': [2.0, 2.5, 1.8],  # 杆粗细
+    #     'colors_config': ['#FF6347', '#4169E1', '#32CD32'],  # 橙红、蓝、蓝绿
+    #     'alphas_config': [0.6, 0.6, 0.6],  # 透明度（0.0~1.0）
+    #     'axis_config': [False, False, False],  # 不使用对数轴
+    #     'range_config': [
+    #         [0, 150],  # CORE_GR 范围
+    #         [0.5, 500],  # CORE_RT 范围
+    #         [1.8, 3.0]  # CORE_DEN 范围
+    #     ]
+    # }
+    config_core = {}
 
     well_viewer = WellLogVisualizer(LDM,
                                     config_logging={'curves_plot':['CON_MEAN_DYNA', 'DIS_MEAN_DYNA', ['ENG_MEAN_DYNA', 'ENG_SUB_DYNA'], ['HOM_MEAN_DYNA', 'HOM_SUB_DYNA'], ['CON_SUB_DYNA', 'DIS_SUB_DYNA']]},
@@ -119,8 +113,8 @@ if __name__ == '__main__':
                                     config_core=config_core  # 传入岩心配置
     )
 
-    config_logging, config_fmi, config_nmr, config_type = well_viewer.get_plot_config()
-    print(config_logging, '\n', config_fmi, '\n', config_nmr, '\n', config_type)
+    config_logging, config_fmi, config_nmr, config_type, config_core = well_viewer.get_plot_config()
+    print(config_logging, '\n', config_fmi, '\n', config_nmr, '\n', config_type, '\n', config_core)
 
     well_viewer.visualize()
 

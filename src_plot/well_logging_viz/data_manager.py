@@ -591,6 +591,7 @@ class LoggingDataManager:
         - core_curves      : 岩心数据对应 logging_data 的哪几列
         - thicknesses_config: 杆粗细设置（线宽）
         - colors_config    : 岩心杆颜色设置
+        - alphas_config    : 岩心杆透明度设置（0.0~1.0，0=完全透明，1=完全不透明）
         - axis_config      : 坐标轴是否 log 配置
         - range_config     : 数据上下范围设置（用于缩放）
         """
@@ -645,7 +646,23 @@ class LoggingDataManager:
             ]
             config['colors_config'] = colors_config
 
-        # 5. 范围配置验证和自动补全
+        # 5. 透明度配置智能补全
+        alphas_config = config.get('alphas_config', [])
+        if len(alphas_config) < n_curves:
+            default_alpha = 1.0  # 默认完全不透明
+            alphas_config = list(alphas_config) + [default_alpha] * (n_curves - len(alphas_config))
+            config['alphas_config'] = alphas_config
+
+        # 6. 范围配置验证和自动补全
+        # range_config: 每个岩心曲线对应的 [min, max] 缩放范围
+            # 默认岩心颜色序列
+            default_core_colors = ['#1E90FF', '#FF6347', '#32CD32', '#FFD700', '#9370DB']
+            colors_config = list(colors_config) + [
+                default_core_colors[i % len(default_core_colors)] for i in range(len(colors_config), n_curves)
+            ]
+            config['colors_config'] = colors_config
+
+        # 7. 范围配置验证和自动补全
         # range_config: 每个岩心曲线对应的 [min, max] 缩放范围
         range_config = config.get('range_config', [])
         if len(range_config) < n_curves:
@@ -665,7 +682,7 @@ class LoggingDataManager:
                     range_config.append([0.0, 1.0])
             config['range_config'] = range_config
 
-        # 6. 坐标轴配置验证
+        # 8. 坐标轴配置验证
         axis_config = config.get('axis_config', [])
         if len(axis_config) < n_curves:
             axis_config = list(axis_config) + [False] * (n_curves - len(axis_config))
@@ -736,6 +753,7 @@ class LoggingDataManager:
                 'core_curves': [],  # 岩心测井曲线为datalogging的哪几道['Core_data1', 'Core_data2']
                 'thicknesses_config': [],  # 线宽设置，线的粗细设置
                 'colors_config': [],  # 岩心数据颜色设置
+                'alphas_config': [],  # 岩心杆透明度设置（0.0~1.0）
                 'axis_config': [],  # 坐标轴是否log配置
                 'range_config': [],  # 岩心数据上下范围设置，用来进行缩放用的
             }

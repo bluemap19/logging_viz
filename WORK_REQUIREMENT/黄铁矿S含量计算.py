@@ -115,7 +115,7 @@ if __name__ == '__main__':
         config_fmi = {'color_map': 'hot', 'title_fmi':title_fmi_list}
     )
 
-    config_logging, config_fmi, config_nmr, config_type = well_viewer.get_plot_config()
+    config_logging, config_fmi, config_nmr, config_type, config_core = well_viewer.get_plot_config()
     print(config_logging, '\n', config_fmi, '\n', config_nmr, '\n', config_type)
 
     well_viewer.visualize(figsize=(24, 12))

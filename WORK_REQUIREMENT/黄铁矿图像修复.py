@@ -151,7 +151,7 @@ if __name__ == '__main__':
         # config_type = {'types_cols': 'auto'},
         config_fmi = {'color_map': 'hot', 'title_fmi': ['FMI_DYNA', 'FMI_DYNA_MASK', 'FMI_TELEA', 'FMI_HYBRID', 'FMI_COLUMN']}
     )
-    config_logging, config_fmi, config_nmr, config_type = well_viewer.get_plot_config()
+    config_logging, config_fmi, config_nmr, config_type, config_core = well_viewer.get_plot_config()
     print(config_logging, '\n', config_fmi, '\n', config_nmr, '\n', config_type)
     well_viewer.visualize()
 
