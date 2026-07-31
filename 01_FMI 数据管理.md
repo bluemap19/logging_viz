@@ -346,8 +346,8 @@ fmi_files = well.get_path_list_fmi()
 print(f"找到 {len(fmi_files)} 个 FMI 文件")
 
 # 搜索动态和静态文件
-fmi_dyna = well.search_fmi_path_list(new_kw=['DYNA'])
-fmi_stat = well.search_fmi_path_list(new_kw=['STAT'])
+fmi_dyna = well.search_file_path_list(name_keywords=['DYNA'])
+fmi_stat = well.search_file_path_list(name_keywords=['STAT'])
 ```
 
 ### 5.2 获取 FMI 图像数据

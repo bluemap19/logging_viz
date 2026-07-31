@@ -349,10 +349,11 @@ def get_well_data_by_charters(self, well_name: str,
 **目的：** 在指定井中搜索包含特定关键字的文件
 
 **代码示例：**
+
 ```python
 def search_target_file_path(self, well_name: str,
-                             target_path_feature: List[str],
-                             target_file_type: str):
+                            target_path_feature: List[str],
+                            target_file_type: str):
     """
     搜索目标文件路径
     
@@ -366,18 +367,18 @@ def search_target_file_path(self, well_name: str,
     """
     if well_name not in self.WELL_DATA:
         raise ValueError(f"井 '{well_name}' 不在项目中")
-    
+
     well = self.WELL_DATA[well_name]
-    
+
     # 根据文件类型选择搜索方法
     if target_file_type == 'logging':
-        return well.search_logging_path_list(new_kw=target_path_feature)
+        return well.search_file_path_list(name_keywords=target_path_feature)
     elif target_file_type == 'table':
-        return well.search_table_path_list(new_kw=target_path_feature)
+        return well.search_file_path_list(name_keywords=target_path_feature)
     elif target_file_type == 'fmi':
-        return well.search_fmi_path_list(new_kw=target_path_feature)
+        return well.search_file_path_list(name_keywords=target_path_feature)
     elif target_file_type == 'nmr':
-        return well.search_nmr_path_list(new_kw=target_path_feature)
+        return well.search_file_path_list(name_keywords=target_path_feature)
     else:
         raise ValueError(f"不支持的文件类型：{target_file_type}")
 ```
@@ -460,6 +461,7 @@ def combined_all_logging_with_type(self,
 **目的：** 批量计算多井的 FMI 纹理特征
 
 **代码示例：**
+
 ```python
 def get_fmi_texture(self, well_names: List[str],
                     file_path_logging: str,
@@ -478,50 +480,50 @@ def get_fmi_texture(self, well_names: List[str],
         纹理数据 DataFrame (包含 Well 列)
     """
     import numpy as np
-    
+
     if texture_config is None:
         texture_config = {
             'level': 16,
             'distance': [2, 4],
-            'angles': [0, np.pi/2],
+            'angles': [0, np.pi / 2],
             'windows_length': 80,
             'windows_step': 10
         }
-    
+
     all_texture = []
-    
+
     for well_name in well_names:
         if well_name not in self.WELL_DATA:
             continue
-        
+
         well = self.WELL_DATA[well_name]
-        
+
         # 搜索 FMI 文件
-        fmi_files = well.search_fmi_path_list(new_kw=['DYNA'])
-        
+        fmi_files = well.search_file_path_list(name_keywords=['DYNA'])
+
         if not fmi_files:
             print(f"警告：井 '{well_name}' 没有 FMI 数据")
             continue
-        
+
         # 获取纹理数据
         texture_df = well.get_FMI_texture(
             key=fmi_files[0],
             texture_config=texture_config
         )
-        
+
         if texture_df is not None:
             # 筛选指定模式的列
             if Mode:
                 mode_cols = [col for col in texture_df.columns if Mode in col.upper()]
                 mode_cols = ['DEPTH'] + mode_cols
                 texture_df = texture_df[mode_cols]
-            
+
             texture_df['Well'] = well_name
             all_texture.append(texture_df)
-    
+
     if not all_texture:
         return None
-    
+
     return pd.concat(all_texture, ignore_index=True)
 ```
 

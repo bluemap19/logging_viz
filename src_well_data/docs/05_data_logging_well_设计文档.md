@@ -5,8 +5,8 @@
 **文件路径：** `src_well_data/data_logging_well.py`  
 **核心类：** `DATA_WELL`  
 **功能定位：** 井数据统一管理器，作为 Facade（门面）模式整合 DataLogging、DataFMI、DataNMR、DataTable、DataCore 五个子模块，提供统一的井数据访问接口。  
-**代码规模：** ~570 行（不含测试代码）  
-**最后更新：** 2026-07-30
+**代码规模：** ~650 行（含测试代码）  
+**最后更新：** 2026-07-31
 
 ---
 
@@ -24,7 +24,7 @@ DATA_WELL (Facade)
     ├─► DataFMI       — 电成像数据
     ├─► DataNMR       — 核磁共振数据
     ├─► DataTable     — 岩性类型表
-    └─► DataCore      — 岩心实验数据（新增）
+    └─► DataCore      — 岩心实验数据
 ```
 
 ---
@@ -38,17 +38,17 @@ self.logging_dict: Dict[str, DataLogging] = {}  # path → DataLogging实例
 self.table_dict: Dict[str, DataTable] = {}      # path → DataTable实例
 self.FMI_dict: Dict[str, DataFMI] = {}          # path → DataFMI实例
 self.NMR_dict: Dict[str, Any] = {}              # path → DataNMR实例
-self.core_dict: Dict[str, DataCore] = {}         # path → DataCore实例（新增）
+self.core_dict: Dict[str, DataCore] = {}        # path → DataCore实例
 ```
 
 ### 2.2 路径容器
 
 ```python
 self.path_list_logging: List[str] = []  # 所有测井文件路径
-self.path_list_table: List[str] = []     # 所有表格文件路径
+self.path_list_table: List[str] = []    # 所有表格文件路径
 self.path_list_fmi: List[str] = []      # 所有 FMI 文件路径
 self.path_list_nmr: List[str] = []      # 所有 NMR 文件路径
-self.path_list_core: List[str] = []     # 所有岩心数据文件路径（新增）
+self.path_list_core: List[str] = []     # 所有岩心数据文件路径
 ```
 
 ### 2.3 文件识别关键字
@@ -147,7 +147,7 @@ def get_NMR(key='', depth=None) -> Tuple[np.ndarray, np.ndarray]
 
 返回 `(data, depth)` 元组。
 
-#### `get_core()` ⭐ 新增
+#### `get_core()`
 
 ```python
 def get_core(
@@ -210,7 +210,8 @@ def combine_logging_table(
     replace_dict=None,
     new_col='Type',
     norm=False,
-    tolerance=0.5,  # 深度容差（米）
+    tolerance=0,
+    depth_limit: Optional[List[float]] = None,
 ) -> pd.DataFrame
 ```
 
@@ -223,19 +224,97 @@ def combine_logging_table(
 5. 删除 NaN，类型列转为 int
 6. 可选重命名类型列
 
+#### `combine_logging_core()` ⭐ 新增
+
+**功能：** 将测井曲线数据与岩心实验数据合并。
+
+```python
+def combine_logging_core(
+    logging_key: str = '',
+    curve_names_logging: Optional[List[str]] = None,
+    norm: bool = False,
+    tolerance: float = 0,
+    core_key: str = '',
+    curve_names_core: Optional[List[str]] = None,
+    depth_limit: Optional[List[float]] = None,
+) -> pd.DataFrame
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `logging_key` | `str` | `''` | 测井文件路径或关键字 |
+| `curve_names_logging` | `List[str]` | `None` | 要保留的 logging 曲线列名，None→全部 |
+| `norm` | `bool` | `False` | 是否对测井曲线归一化 |
+| `tolerance` | `float` | `0` | 深度合并容差（米） |
+| `core_key` | `str` | `''` | 岩心文件路径或关键字，''→跳过 |
+| `curve_names_core` | `List[str]` | `None` | 要保留的 core 列名，None→全部 |
+| `depth_limit` | `List[float]` | `None` | 全局深度限制 [min, max] |
+
+**流程：**
+
+1. 获取 logging 数据作为主基准
+2. 获取 core 数据（稀疏采样）
+3. 调用 `combine_logging_table()` 执行深度最近邻匹配
+4. 无匹配处保留 NaN（不删除行）
+
+**返回：** `depth + logging_curves + core_curves` 格式 DataFrame
+
+#### `combine_logging_table_core()` ⭐ 新增
+
+**功能：** 将 logging、table、core 三类数据按深度最近邻合并。
+
+```python
+def combine_logging_table_core(
+    logging_key: str = '',
+    curve_names_logging: Optional[List[str]] = None,
+    table_key: str = '',
+    replace_dict: Optional[Dict] = None,
+    new_col: str = 'Type',
+    norm: bool = False,
+    tolerance: float = 0,
+    core_key: str = '',
+    curve_names_core: Optional[List[str]] = None,
+    depth_limit: Optional[List[float]] = None,
+) -> pd.DataFrame
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `logging_key` | `str` | `''` | 测井文件路径或关键字 |
+| `curve_names_logging` | `List[str]` | `None` | 要保留的 logging 曲线列名 |
+| `table_key` | `str` | `''` | 类型表路径或关键字，''→跳过 |
+| `replace_dict` | `Dict` | `None` | 类型替换字典 |
+| `new_col` | `str` | `'Type'` | 替换后的标签列名 |
+| `norm` | `bool` | `False` | 是否归一化 |
+| `tolerance` | `float` | `0` | 深度容差（米） |
+| `core_key` | `str` | `''` | 岩心路径或关键字，''→跳过 |
+| `curve_names_core` | `List[str]` | `None` | 要保留的 core 列名 |
+| `depth_limit` | `List[float]` | `None` | 全局深度限制 |
+
+**合并策略：**
+
+1. 获取 logging 数据（主基准）
+2. 若 `table_key` 非空：调用 `combine_logging_table()`
+3. 若 `core_key` 非空：调用 `combine_logging_core()`
+4. 若两者均存在：`pd.merge(on=key_cols, how='outer')`
+5. 若两者均不存在：退化为普通 logging 获取
+
+**返回：** `depth + logging_curves + table_label + core_curves` 格式 DataFrame
+
 ---
 
-## 4. 搜索辅助方法
+## 4. 路径获取接口
 
-| 方法 | 说明 | 新增 |
-|------|------|------|
-| `search_logging_path_list(new_kw=[])` | 用新关键字搜索测井文件（AND 匹配） | — |
-| `search_table_path_list(new_kw=[])` | 用新关键字搜索表格文件 | — |
-| `search_fmi_path_list(new_kw=[])` | 用新关键字搜索 FMI 文件 | — |
-| `search_nmr_path_list(new_kw=[])` | 用新关键字搜索 NMR 文件 | — |
-| `search_core_path_list(new_kw=[])` | 用新关键字搜索岩心数据文件 | ⭐ |
-| `get_path_list_core()` | 获取岩心数据文件路径列表 | ⭐ |
-| `search_data_path(keywords, path_list)` | 在指定路径列表中模糊搜索 | — |
+| 方法 | 说明 |
+|------|------|
+| `get_path_list_logging()` | 获取测井文件路径列表 |
+| `get_path_list_fmi()` | 获取 FMI 文件路径列表 |
+| `get_path_list_nmr()` | 获取 NMR 文件路径列表 |
+| `get_path_list_table()` | 获取表格文件路径列表 |
+| `get_path_list_core()` | 获取岩心数据文件路径列表 |
+| `search_file_path_list(name_keywords, file_extensions)` | 按关键字精确搜索（AND 匹配） |
+
+**注意：** 原 `search_*_path_list()` 系列方法已被统一的 `search_file_path_list()` 替代。
 
 ---
 
@@ -250,12 +329,12 @@ def well_summary(self) -> Dict[str, Any]:
         "paths_fmi": self.path_list_fmi,
         "paths_table": self.path_list_table,
         "paths_nmr": self.path_list_nmr,
-        "paths_core": self.path_list_core,         # 新增
+        "paths_core": self.path_list_core,
         "logging_files_num": len(self.path_list_logging),
         "fmi_files_num": len(self.path_list_fmi),
         "table_files_num": len(self.path_list_table),
         "nmr_files_num": len(self.path_list_nmr),
-        "core_files_num": len(self.path_list_core), # 新增
+        "core_files_num": len(self.path_list_core),
     }
 ```
 
@@ -281,13 +360,13 @@ def init_NMR(self, path: str = ''):
         path = self.path_list_nmr[0]        # ← 修复：改为 path_list_nmr
 ```
 
-### 6.2 其他潜在问题（未解决）
+### 6.2 其他说明
 
-| 问题 | 说明 |
+| 项目 | 说明 |
 |------|------|
-| `_get_default_obj` 字典遍历 | `next(iter(dict.values()))` 逻辑上不够明确，依赖 Python 3.7+ 有序保证 |
-| 文件扫描依赖关键字匹配 | 如果文件名不符合关键字规则（如不含 "core"），会被遗漏 |
-| `tolerance` 参数未注释 | 0.5 米容差可能不适合高精度场景 |
+| `_get_default_obj` | 依赖 Python 3.7+ 有序字典保证 |
+| 文件扫描 | 依赖关键字匹配，文件名需符合命名规则 |
+| 合并容差 | 默认 tolerance=0，需根据数据分辨率调整 |
 
 ---
 
@@ -297,7 +376,8 @@ def init_NMR(self, path: str = ''):
 |------|------|----------|
 | v1.0 | 2026-07-30 | 初始版本（不含 DataCore） |
 | v2.0 | 2026-07-30 | 新增 DataCore 集成，修复 init_NMR Bug |
+| v2.1 | 2026-07-31 | 新增 `combine_logging_core()`、`combine_logging_table_core()` 方法；简化 `search_*_path_list` 为统一接口 |
 
 ---
 
-*文档版本：2.0 | 对应源码版本：2026-07-30*
+*文档版本：2.1 | 对应源码版本：2026-07-31*

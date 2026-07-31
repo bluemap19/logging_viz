@@ -29,13 +29,13 @@ def user_specific_test():
     for k, val in summary_temp.items():
         print(k, val)
 
-    path_logging_target = well.search_logging_path_list(new_kw=['120', 'TEXTURE', 'logging'])
+    path_logging_target = well.search_file_path_list(name_keywords=['120', 'TEXTURE', 'logging'])
     print(path_logging_target)
     # path_table_target = well.search_table_path_list(new_kw=['table'])
     # print(path_table_target)
-    path_fmi_dyna_target = well.search_fmi_path_list(new_kw=["DYNA"])
+    path_fmi_dyna_target = well.search_file_path_list(name_keywords=["DYNA"])
     print(path_fmi_dyna_target)
-    path_fmi_stat_target = well.search_fmi_path_list(new_kw=['STAT'])
+    path_fmi_stat_target = well.search_file_path_list(name_keywords=['STAT'])
     print(path_fmi_stat_target)
 
     texture_all = well.get_FMI_textures(texture_config={

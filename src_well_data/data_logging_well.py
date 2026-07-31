@@ -109,7 +109,7 @@ class DATA_WELL:
         self.path_list_core = search_files_by_criteria(
             self.well_path,
             name_keywords=self.CORE_KW,
-            file_extensions=['.csv', '.xlsx'],
+            file_extensions=['.csv', '.xlsx', '.txt'],
             all_keywords=False
         )
 
@@ -373,14 +373,14 @@ class DATA_WELL:
             if path_dyna not in self.path_list_fmi:
                 raise FileNotFoundError("file {} not found".format(path_dyna))
         else:
-            path_dyna = self.search_fmi_path_list(new_kw=[self.FMI_KW[0]])[0]
+            path_dyna = self.search_file_path_list(name_keywords=[self.FMI_KW[0]])[0]
 
         if 'path_stat' in path_config:
             path_stat = path_config['path_stat']
             if path_stat not in self.path_list_fmi:
                 raise FileNotFoundError("file {} not found".format(path_stat))
         else:
-            path_stat = self.search_fmi_path_list(new_kw=[self.FMI_KW[1]])[0]
+            path_stat = self.search_file_path_list(name_keywords=[self.FMI_KW[1]])[0]
 
         texture_dyna = self.get_FMI_texture(key=path_dyna, texture_config=texture_config)
         texture_stat = self.get_FMI_texture(key=path_stat, texture_config=texture_config)
@@ -404,6 +404,26 @@ class DATA_WELL:
             return None
         fmi_fde = obj.get_fmi_fde(config_fde=fde_config)
         return fmi_fde
+
+    def get_FMI_fdes(self, fde_config: Optional[Dict] = None):
+        """
+        获取动静态电成像的 FDE 数据（tuple 格式）
+
+        Args:
+            fde_config: FDE 计算配置字典
+
+        Returns:
+            (fde_dyna, fde_stat) 元组
+        """
+        path_dyna_list = self.search_file_path_list(name_keywords=[self.FMI_KW[0]])
+        path_stat_list = self.search_file_path_list(name_keywords=[self.FMI_KW[1]])
+        path_dyna = path_dyna_list[0] if path_dyna_list else ''
+        path_stat = path_stat_list[0] if path_stat_list else ''
+        fde_dyna = self.get_FMI_fde(key=path_dyna, fde_config=fde_config)
+        fde_stat = self.get_FMI_fde(key=path_stat, fde_config=fde_config)
+
+        return fde_dyna, fde_stat
+
 
     # =========================================================================
     #                          数据概览接口
@@ -445,7 +465,8 @@ class DATA_WELL:
             replace_dict=None,
             new_col='Type',
             norm=False,
-            tolerance=0.5,
+            tolerance=0,
+            depth_limit: Optional[List[float]] = None,
     ):
         """
         将连续曲线 logging 与类型表（3列或2列）合并
@@ -466,7 +487,12 @@ class DATA_WELL:
             合并后的 DataFrame (depth + curves + lithology_label)
         """
         # 1 获取曲线数据
-        df_log = self.get_logging(logging_key, curve_names_logging, norm)
+        df_log = self.get_logging(
+            key=logging_key,
+            curve_names=curve_names_logging,
+            norm=norm,
+            depth_limit=depth_limit,
+        )
         depth_col = df_log.columns[0]
 
         # 2 获取类型表
@@ -493,10 +519,209 @@ class DATA_WELL:
         df_merge.dropna(inplace=True)
         df_merge[table_columns[-1]] = df_merge[table_columns[-1]].astype(int)
 
-        if new_col != '' or new_col is None:
+        if new_col != '' or new_col is not None:
             df_merge.rename(columns={table_columns[-1]: new_col}, inplace=True)
 
         return df_merge
+
+    def combine_logging_core(
+            self,
+            logging_key: str = '',
+            curve_names_logging: Optional[List[str]] = None,
+            norm: bool = False,
+            tolerance: float = 0,
+            core_key: str = '',
+            curve_names_core: Optional[List[str]] = None,
+            depth_limit: Optional[List[float]] = None,
+    ) -> pd.DataFrame:
+        """
+        将 logging、table、core 三类数据按深度最近邻合并
+
+        以 logging 深度轴为主基准，通过 cKDTree 最近邻匹配将 table 和 core
+        的数据合并进来（table 和 core 可二选一、同时存在或都不传）。
+
+        Args:
+            logging_key : 测井数据文件路径或关键字，'' → 取 scan 到的第一个文件
+            curve_names_logging : 要保留的 logging 曲线列名列表，None → 全部曲线
+            norm : 是否对测井曲线做归一化
+            tolerance : 深度合并容差（米），≤0 → 自动计算（logging 分辨率/2 + 0.001）
+            core_key : 岩心数据文件路径或关键字，'' → 跳过 core 合并
+            curve_names_core : 要保留的 core 列名列表，None → 全部列
+            depth_limit : 全局深度限制 [min_depth, max_depth]，None → 不限制
+
+        Returns:
+            合并后的 DataFrame (depth + logging_curves + table_label + core_curves)
+            无匹配处留 NaN（保留全部 logging 数据行）。
+
+        Note:
+            - core 数据为稀疏采样（间隔约 1m），合并后大部分行 core 列仍为 NaN，
+              这正是设计预期，调用方可在 NaN 处做插值或直接丢弃。
+            - 若 table_key 和 core_key 均为 ''，退化为普通 logging 获取
+              （含 curve_names_logging / norm / depth_limit 过滤）。
+        """
+        # =================================================================
+        # Step 1: 获取 logging 数据（主基准）
+        # =================================================================
+        df_log = self.get_logging(
+            key=logging_key,
+            curve_names=curve_names_logging,
+            norm=norm,
+            depth_limit=depth_limit if depth_limit else []
+        )
+        if df_log.empty:
+            print('[WARN] logging 数据为空，返回空 DataFrame')
+            return pd.DataFrame()
+
+        depth_col = df_log.columns[0]
+        df_log = df_log.sort_values(depth_col).reset_index(drop=True)
+
+        df_current = df_log.copy()
+
+
+        # =================================================================
+        # Step 3: 合并 core（如有）
+        # =================================================================
+        df_core = self.get_core(
+            key=core_key,
+            curve_names=curve_names_core,
+            depth_range=depth_limit
+        )
+        if df_core.empty:
+            print('[WARN] core 数据为空，跳过 core 合并')
+        else:
+            # core DataFrame 深度列名通常为 'DEPTH'（列名清理后统一）
+            core_depth_col = df_core.columns[0]
+            df_core = df_core.sort_values(core_depth_col).reset_index(drop=True)
+
+            # core 的曲线列（不含深度列）
+            core_curve_cols = [c for c in df_core.columns if c != core_depth_col]
+
+            arr_log2 = df_current.values.astype(np.float32)
+            arr_core = df_core.values.astype(np.float32)
+            arr_merged2 = combine_logging_table(
+                arr_log2, arr_core, drop=False, tolerance=tolerance
+            )
+            # 合并后的列名：logging 列 + core 曲线列（深度列已含在 logging 中，不重复）
+            log_cols2 = list(df_current.columns)
+            core_out_cols = log_cols2 + core_curve_cols
+            df_current = pd.DataFrame(arr_merged2, columns=core_out_cols)
+            df_current.dropna(subset=[depth_col], inplace=True)
+            print(f'[INFO] core 合并完成，最终 DataFrame shape: {df_current.shape}')
+            print(f'[INFO] core 列: {core_curve_cols}')
+
+        return df_current
+
+    def combine_logging_table_core(
+            self,
+            logging_key: str = '',
+            curve_names_logging: Optional[List[str]] = None,
+            table_key: str = '',
+            replace_dict: Optional[Dict] = None,
+            new_col: str = 'Type',
+            norm: bool = False,
+            tolerance: float = 0,
+            core_key: str = '',
+            curve_names_core: Optional[List[str]] = None,
+            depth_limit: Optional[List[float]] = None,
+    ) -> pd.DataFrame:
+        """
+        将 logging、table、core 三类数据按深度最近邻合并
+
+        以 logging 深度轴为主基准，通过 cKDTree 最近邻匹配将 table 和 core
+        的数据合并进来（table 和 core 可二选一、同时存在或都不传）。
+
+        Args:
+            logging_key : 测井数据文件路径或关键字，'' → 取 scan 到的第一个文件
+            curve_names_logging : 要保留的 logging 曲线列名列表，None → 全部曲线
+            table_key : 类型表文件路径或关键字，'' → 跳过 table 合并
+            replace_dict : 类型替换字典，None → 不做类型替换
+            new_col : 替换/重命名后的标签列名
+            norm : 是否对测井曲线做归一化
+            tolerance : 深度合并容差（米），≤0 → 自动计算（logging 分辨率/2 + 0.001）
+            core_key : 岩心数据文件路径或关键字，'' → 跳过 core 合并
+            curve_names_core : 要保留的 core 列名列表，None → 全部列
+            depth_limit : 全局深度限制 [min_depth, max_depth]，None → 不限制
+
+        Returns:
+            合并后的 DataFrame (depth + logging_curves + table_label + core_curves)
+            无匹配处留 NaN（保留全部 logging 数据行）。
+
+        Note:
+            - core 数据为稀疏采样（间隔约 1m），合并后大部分行 core 列仍为 NaN，
+              这正是设计预期，调用方可在 NaN 处做插值或直接丢弃。
+            - 若 table_key 和 core_key 均为 ''，退化为普通 logging 获取
+              （含 curve_names_logging / norm / depth_limit 过滤）。
+        """
+        # =================================================================
+        # Step 1: 获取 logging 数据（主基准）
+        # =================================================================
+        df_log = self.get_logging(
+            key=logging_key,
+            curve_names=curve_names_logging,
+            norm=norm,
+            depth_limit=depth_limit if depth_limit else []
+        )
+        if df_log.empty:
+            print('[WARN] logging 数据为空，返回空 DataFrame')
+            return pd.DataFrame()
+
+        depth_col = df_log.columns[0]
+        df_log = df_log.sort_values(depth_col).reset_index(drop=True)
+
+        # 若 table 和 core 均未指定，直接返回过滤后的 logging
+        if not table_key and not core_key:
+            print(f'[INFO] 未指定 table 和 core，直接返回 logging 数据 ({df_log.shape[0]} 行)')
+            return df_log
+
+        df_current = df_log.copy()
+
+        # =================================================================
+        # Step 2: 合并 table（如有）
+        # =================================================================
+        if table_key:
+            df_current_logging = self.combine_logging_table(
+                logging_key=logging_key,
+                curve_names_logging=curve_names_logging,
+                table_key=table_key,
+                replace_dict=replace_dict,
+                new_col=new_col,
+                norm=norm,
+                tolerance=tolerance,
+                depth_limit=depth_limit
+            )
+
+        # =================================================================
+        # Step 3: 合并 core（如有）
+        # =================================================================
+        if core_key:
+            df_current_core = self.combine_logging_core(
+                logging_key=logging_key,
+                curve_names_logging=curve_names_logging,
+                core_key=core_key,
+                depth_limit=depth_limit,
+                tolerance=tolerance,
+                curve_names_core = curve_names_core if curve_names_core else []
+            )
+
+
+        if table_key and core_key:
+            cols_logging = set(list(df_current_logging.columns))
+            cols_core = set(list(df_current_core.columns))
+            # common_cols = list(cols_logging | cols_core)
+            key_cols = list(cols_logging & cols_core)  # 交集作为连接键
+            # print("并集列:", common_cols)
+            # df_current = pd.merge(df_current_logging, df_current_core, on=common_cols, how='inner')
+            df_current = pd.merge(df_current_logging, df_current_core, on=key_cols, how='outer')
+        elif table_key and not core_key:
+            df_current = df_current_logging
+        elif not table_key and core_key:
+            df_current = df_current_core
+        else:
+            print('NO KEY AVAILABLE, ERROR')
+            exit(0)
+
+        return df_current
+
 
     def get_table_replace_dict(self, table_key=''):
         """获取类型表的替换字典"""
@@ -526,226 +751,142 @@ class DATA_WELL:
         """获取岩心实验数据文件路径列表"""
         return self.path_list_core
 
-    def search_logging_path_list(self, new_kw=[]):
+    def search_file_path_list(self, name_keywords=[], file_extensions=['.csv', '.xlsx', '.txt']):
         """
         按关键字精确搜索常规测井文件路径（AND 匹配）
 
         Args:
-            new_kw: 搜索关键字列表，所有关键字均需出现在文件名中
+            name_keywords: 搜索关键字列表，所有关键字均需出现在文件名中
 
         Returns:
             符合条件的文件路径列表
         """
         path_list_logging = search_files_by_criteria(
             self.well_path,
-            name_keywords=new_kw,
-            file_extensions=['.xlsx', '.csv'],
+            name_keywords=name_keywords,
+            file_extensions=file_extensions,
             all_keywords=True
         )
         return path_list_logging
 
-    def search_table_path_list(self, new_kw=[]):
-        """
-        按关键字精确搜索岩性类型表文件路径（AND 匹配）
-
-        Args:
-            new_kw: 搜索关键字列表
-        """
-        path_list_table = search_files_by_criteria(
-            self.well_path,
-            name_keywords=new_kw,
-            file_extensions=['.xlsx', '.csv'],
-            all_keywords=True
-        )
-        return path_list_table
-
-    def search_fmi_path_list(self, new_kw=[]):
-        """
-        按关键字精确搜索 FMI 文件路径（AND 匹配）
-
-        Args:
-            new_kw: 搜索关键字列表
-        """
-        path_list_fmi = search_files_by_criteria(
-            self.well_path,
-            name_keywords=new_kw,
-            file_extensions=['.txt'],
-            all_keywords=True
-        )
-        return path_list_fmi
-
-    def search_nmr_path_list(self, new_kw=[]):
-        """
-        按关键字精确搜索 NMR 文件路径（AND 匹配）
-
-        Args:
-            new_kw: 搜索关键字列表
-        """
-        path_list_nmr = search_files_by_criteria(
-            self.well_path,
-            name_keywords=new_kw,
-            file_extensions=['.csv', '.txt'],
-            all_keywords=True
-        )
-        return path_list_nmr
-
-    def search_core_path_list(self, new_kw: list = []):
-        """
-        按关键字精确搜索岩心实验数据文件路径（AND 匹配）
-
-        Args:
-            new_kw: 搜索关键字列表，所有关键字均需出现在文件名中
-
-        Returns:
-            符合条件的文件路径列表
-        """
-        path_list_core = search_files_by_criteria(
-            self.well_path,
-            name_keywords=new_kw,
-            file_extensions=['.csv', '.xlsx', '.txt'],
-            all_keywords=True
-        )
-        return path_list_core
-
-    def search_file_path_list(self, new_kw: list = []):
-        """
-
-        """
-        path_list_core = search_files_by_criteria(
-            self.well_path,
-            name_keywords=new_kw,
-            file_extensions=['.csv', '.xlsx', '.txt'],
-            all_keywords=True
-        )
-        return path_list_core
 
 
 # =========================================================================
 #                              测试代码
 # =========================================================================
 if __name__ == '__main__':
-    # well = DATA_WELL("F:\logging_workspace\桃镇1H")
-    # well = DATA_WELL(r'F:\logging_workspace\禄探')
-    # well = DATA_WELL(r'F:\logging_workspace\云安012-X18')
-    well = DATA_WELL(r'Z:\logging_workspace\姬119H2')
+    well = DATA_WELL(path_folder=r'Z:\logging_workspace\姬119H2')
 
-    summary_temp = well.well_summary()
-    for k, val in summary_temp.items():
-        print(k, val)
+    # =====================================================================
+    # 1. 文件扫描与总览
+    # =====================================================================
+    print("\n" + "=" * 70)
+    print("【1】well_summary() — 井数据总览")
+    print("=" * 70)
+    summary = well.well_summary()
+    for k, v in summary.items():
+        print(f"  {k}: {v}")
 
-    logging_data_temp = well.get_logging()
-    print(logging_data_temp.describe())
+    # =====================================================================
+    # 3. search_*_path_list 系列 — 关键字精确搜索
+    # =====================================================================
+    print("\n" + "=" * 70)
+    print("【3】search_*_path_list 系列 — 关键字精确搜索")
+    print("=" * 70)
+    p_logging = well.search_file_path_list(name_keywords=['姬119H2', '常规测井'])
+    p_table = well.search_file_path_list(name_keywords=['table'])
+    p_dyna = well.search_file_path_list(name_keywords=['DYNA'])
+    p_stat = well.search_file_path_list(name_keywords=['STAT'])
+    p_nmr = well.search_file_path_list(name_keywords=['NMR'])
+    p_core = well.search_file_path_list(name_keywords=['CORE'])
 
-    path_list_fmi = well.get_path_list_fmi()
-    print(path_list_fmi)
-    path_list_logging = well.get_path_list_logging()
-    print(path_list_logging)
+    print("search_logging_path_list(['姬119H2','常规测井']):", p_logging)
+    print("search_table_path_list(['table']):", p_table)
+    print("search_fmi_path_list(['DYNA']):", p_dyna)
+    print("search_fmi_path_list(['STAT']):", p_stat)
+    print("search_nmr_path_list(['NMR']):", p_nmr)
+    print("search_core_path_list(['CORE']):", p_core)
 
-    path_logging_target = well.search_logging_path_list(new_kw=['120', 'TEXTURE', 'logging'])
-    print("['120', 'TEXTURE', 'logging']:", path_logging_target)
-    path_table_target = well.search_table_path_list(new_kw=['table'])
-    print("['table']:", path_table_target)
-    path_fmi_dyna_target = well.search_fmi_path_list(new_kw=['DYNA'])
-    print("['DYNA']:", path_fmi_dyna_target)
-    path_fmi_stat_target = well.search_fmi_path_list(new_kw=['STAT'])
-    print("['STAT']:", path_fmi_stat_target)
-    path_core_target = well.search_core_path_list(new_kw=['CORE'])
-    print("['CORE']:", path_core_target)
+    # =====================================================================
+    # 6. get_table — 岩性类型表（mode='2' 通常更稳定）
+    # =====================================================================
+    print("\n" + "=" * 70)
+    print("【6】get_table — 岩性类型表")
+    print("=" * 70)
+    try:
+        df_tab2 = well.get_table(key=p_table[0])
+        print(f"  mode='2' Shape: {df_tab2.shape}")
+        print("  Head:\n" + df_tab2.head(5).to_string())
+    except Exception as e:
+        print(f"  mode='2' FAIL: {e}")
+    try:
+        df_tab3 = well.get_table(key=p_table[1])
+        print(f"  mode='3' Shape: {df_tab3.shape}")
+        print("  Head:\n" + df_tab3.head(5).to_string())
+    except Exception as e:
+        print(f"  mode='3' FAIL: {e}")
 
+    try:
+        rep_dict = well.get_table_replace_dict(table_key=p_table[0])
+        print("  get_table_replace_dict():", rep_dict)
+    except Exception as e:
+        print(f"  get_table_replace_dict() FAIL: {e}")
 
-    # # # well.get_FMI_fdes(fde_config={'windows_length': 160, 'windows_step': 40, 'processing_method': 'original'})
-    # #
-    # # # # texture_dyna = well.get_FMI_texture(key='F:\\logging_workspace\\云安012-X18\\云安012-X18-DYNA.txt', texture_config = {
-    # # # #         'level': 16,  # 灰度级别
-    # # # #         'distance': [2, 4],  # 像素距离
-    # # # #         'angles': [0, np.pi / 2],  # 角度方向
-    # # # #         'windows_length': 80,  # 窗口长度
-    # # # #         'windows_step': 10  # 滑动步长
-    # # # # })
-    # # # # texture_stat = well.get_FMI_texture(key='F:\\logging_workspace\\云安012-X18\\云安012-X18-STAT.txt', texture_config = {
-    # # # #         'level': 16,  # 灰度级别
-    # # # #         'distance': [2, 4],  # 像素距离
-    # # # #         'angles': [0, np.pi / 2],  # 角度方向
-    # # # #         'windows_length': 80,  # 窗口长度
-    # # # #         'windows_step': 10  # 滑动步长
-    # # # # })
-    # # # # print(texture_dyna.describe())
-    # # # # print(texture_stat.describe())
-    # #
-    # # texture_all = well.get_FMI_textures(texture_config={
-    # #         'level': 16,  # 灰度级别
-    # #         'distance': [2, 4],  # 像素距离
-    # #         'angles': [0, np.pi / 2],  # 角度方向
-    # #         'windows_length': 120,  # 窗口长度
-    # #         'windows_step': 10  # 滑动步长
-    # # })
-    # # print(texture_all.describe())
-    # #
-    # # # input_cols = ['AC', 'CAL', 'CNL', 'DEN', 'DTS', 'GR', 'RT', 'RXO']
-    # # # input_cols = ['CON_MEAN_STAT', 'DIS_MEAN_STAT', 'HOM_MEAN_STAT', 'ENG_MEAN_STAT', 'COR_MEAN_STAT', 'ASM_MEAN_STAT', 'ENT_MEAN_STAT', 'CON_SUB_STAT', 'DIS_SUB_STAT', 'HOM_SUB_STAT', 'ENG_SUB_STAT', 'COR_SUB_STAT', 'ASM_SUB_STAT', 'ENT_SUB_STAT', 'CON_X_STAT', 'DIS_X_STAT', 'HOM_X_STAT', 'ENG_X_STAT', 'COR_X_STAT', 'ASM_X_STAT', 'ENT_X_STAT', 'CON_Y_STAT', 'DIS_Y_STAT', 'HOM_Y_STAT', 'ENG_Y_STAT', 'COR_Y_STAT', 'ASM_Y_STAT', 'ENT_Y_STAT']
-    # # # input_cols = ['COR_MEAN_STAT', 'COR_Y_STAT', 'ASM_SUB_STAT', 'HOM_SUB_STAT', 'COR_X_STAT', 'ENG_SUB_STAT', 'ENT_SUB_STAT', 'HOM_X_STAT']
-    # # # input_cols = ['CON_MEAN_DYNA', 'DIS_MEAN_DYNA', 'HOM_MEAN_DYNA', 'ENG_MEAN_DYNA', 'COR_MEAN_DYNA', 'ASM_MEAN_DYNA', 'ENT_MEAN_DYNA', 'CON_SUB_DYNA', 'DIS_SUB_DYNA', 'HOM_SUB_DYNA', 'ENG_SUB_DYNA', 'COR_SUB_DYNA', 'ASM_SUB_DYNA', 'ENT_SUB_DYNA', 'CON_X_DYNA', 'DIS_X_DYNA', 'HOM_X_DYNA', 'ENG_X_DYNA', 'COR_X_DYNA', 'ASM_X_DYNA', 'ENT_X_DYNA', 'CON_Y_DYNA', 'DIS_Y_DYNA', 'HOM_Y_DYNA', 'ENG_Y_DYNA', 'COR_Y_DYNA', 'ASM_Y_DYNA', 'ENT_Y_DYNA']
-    # # # input_cols = ['ENT_SUB_DYNA', 'HOM_X_DYNA', 'ENG_SUB_DYNA', 'HOM_SUB_DYNA', 'ASM_SUB_DYNA', 'CON_SUB_DYNA', 'CON_X_DYNA', 'DIS_SUB_DYNA']
-    # input_cols = ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'TEXTURE_LEVEL']
-    #
-    # # target_col = 'Type'
-    # # logging_data_temp_type = well.combine_logging_table(
-    # #         logging_key=path_logging_target[0],
-    # #         curve_names_logging=input_cols,
-    # #         table_key=path_table_target[0],
-    # #         replace_dict={},
-    # #         new_col=target_col,
-    # #         norm=False,
-    # # )
-    # # print(list(logging_data_temp_type.columns))
-    # # print(logging_data_temp_type.describe())
-    # logging_data_temp_type = well.get_logging(key=path_logging_target[0], curve_names=input_cols)
-    # print('form path {} read data :{}'.format(path_logging_target[0], logging_data_temp_type.columns))
-    #
-    # # 创建模型实例
-    # model = MultiVariateLinearRegressor(fit_intercept=True)
-    # # # 训练模型（使用x1, x2, x3预测y1, y2）
-    # # model.fit(logging_data_temp_type, x_cols=['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT'], y_cols=['Type'])
-    # coef_matrix = np.array([-2.82736617, 1.65717694, -1.32970234, -15.03774471]).reshape((1, 4))
-    # intercept_matrix = np.array([2.08278412]).reshape((1, 1))
-    # print('intercept_matrix is :', intercept_matrix.shape, 'coef_matrix is :', coef_matrix.shape)
-    # model.set_fit_paras(x_cols=['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT'], y_cols=['Type'], intercept_matrix=intercept_matrix, coef_matrix=coef_matrix)
-    # ############## 进行预测
-    # logging_data_temp_type.loc[:, 'TEXTURE_LEVEL'] = model.predict(logging_data_temp_type)
-    #
-    # def classify_texture(value):
-    #     if value < 1.0:
-    #         return 0
-    #     elif 1.0 <= value < 1.3:
-    #         return 1
-    #     elif 1.5 <= value < 1.78:
-    #         return 2
-    #     else:
-    #         return 3
-    # logging_data_temp_type['TYPE_PRED'] = logging_data_temp_type['TEXTURE_LEVEL'].apply(classify_texture)
-    #
-    # # logging_data_temp_type.to_csv(well.well_path+'\\'+well.WELL_NAME+'_result.csv', index=False)
-    #
-    # # ############## 计算评估指标
-    # # test_metrics = model.score(logging_data_temp_type)
-    # # print(type(model.coef_matrix), type(model.intercept_matrix), model.coef_matrix.shape, model.intercept_matrix.shape, model.coef_matrix, model.intercept_matrix)
-    #
-    # # pearson_result, pearson_sorted, rf_result, rf_sorted = feature_influence_analysis(
-    # #     df_input=logging_data_temp_type,
-    # #     input_cols=input_cols,
-    # #     target_col=target_col,
-    # #     regressor_use=False,
-    # #     replace_dict={},
-    # # )
-    # # print("\n按皮尔逊系数排序的属性:", pearson_sorted)
-    # # print("\n按随机森林特征重要性排序的属性:", rf_sorted)
-    #
-    # # # 按组抽稀，每个组保留50%的数据
-    # # logging_data_dilute = dilute_dataframe(logging_data_temp_type, ratio=5, method='random', group_by=target_col)
-    # # print(f"按组抽稀50%后形状: {logging_data_dilute.shape}")
-    # # plot_matrxi_scatter(logging_data_dilute, ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'CON_X_DYNA', 'CON_SUB_DYNA', 'COR_MEAN_STAT'], target_col, target_col_dict={})
-    #
-    # depth_config = [logging_data_temp_type['DEPTH'].min(), logging_data_temp_type['DEPTH'].max()]
-    # fmi_dynamic, depth_dyna = well.get_FMI(key=path_fmi_dyna_target[0], depth=depth_config)
-    # fmi_static, depth_stat = well.get_FMI(key=path_fmi_stat_target[0], depth=depth_config)
-    # print('fmi depth from {} to {}, and fmi data shape is :{}'.format(depth_dyna[0,], depth_dyna[-1], fmi_static.shape))
+    # =====================================================================
+    # 11. combine_logging_table — logging + table 合并
+    # =====================================================================
+    print("\n" + "=" * 70)
+    print("【11】combine_logging_table — logging + table 合并")
+    print("=" * 70)
+    try:
+        df_merged_tab = well.combine_logging_table(
+            logging_key=p_logging[0],
+            curve_names_logging=['#DEPTH', 'GR', 'DEN', 'CNL'],
+            table_key=p_table[0],
+            new_col='Type',
+        )
+        print(f"  Shape: {df_merged_tab.shape}")
+        print(f"  Columns: {list(df_merged_tab.columns)}")
+        print("  Head:\n" + df_merged_tab.head(5).to_string())
+    except Exception as e:
+        print(f"  FAIL: {e}")
+
+    # =====================================================================
+    # 12. combine_logging_tables — logging + core 合并
+    # =====================================================================
+    print("\n" + "=" * 70)
+    print("【12】combine_logging_tables — logging + core 合并")
+    print("=" * 70)
+    try:
+        df_merged_core = well.combine_logging_core(
+            logging_key=p_logging[0] if p_logging else '',
+            curve_names_logging=['#DEPTH', 'GR', 'DEN', 'CNL'],
+            core_key=p_core[0] if p_core else '',
+            depth_limit=[2726, 2760],
+            tolerance=0.5,
+        )
+        print(f"  Shape: {df_merged_core.shape}")
+        print(f"  Columns: {list(df_merged_core.columns)}")
+        matched = df_merged_core.dropna(subset=['石英'])
+        print(f"  有矿物数据的行: {len(matched)} / {len(df_merged_core)}")
+        print("  矿物数据示例:")
+        print(matched[['#DEPTH', 'GR', '石英', '钾长石', '黄铁矿']].head(5).to_string(index=False))
+    except Exception as e:
+        print(f"  FAIL: {e}")
+
+    # =====================================================================
+    # 13. combine_logging_tables — 仅 logging（退化场景）
+    # =====================================================================
+    print("\n" + "=" * 70)
+    print("【13】combine_logging_tables — 所有数据齐全")
+    print("=" * 70)
+    df_log_table_core = well.combine_logging_table_core(
+        logging_key=p_logging[0] if p_logging else '',
+        curve_names_logging=['#DEPTH', 'GR', 'DEN'],
+        depth_limit=[2730, 2745],
+        table_key=p_table[0],
+        core_key=p_core[0],
+        tolerance=0
+    )
+    print(f"  Shape: {df_log_table_core.dropna().shape}")
+    print(df_log_table_core.dropna().head(3).to_string())

@@ -44,7 +44,7 @@ class DataTable:
     - 异常安全：完善的错误处理和数据验证
     """
 
-    def __init__(self, path: str = '', well_name: str = '', resolution: float = 0.0025, table_formate:int = TableFormat.DEPTH_TYPE,):
+    def __init__(self, path: str = '', well_name: str = '', resolution: float = 0.0025):
         """
         初始化测井表格对象
 
@@ -574,8 +574,8 @@ def user_specific_test():
     # 用户提供的测试用例
     test_cases = [
         {
-            'path': r'F:\logging_workspace\FY1-15\FY1-15_LITHO_TYPE.csv',
-            'well_name': 'FY1-15',
+            # 'path': r'Z:\logging_workspace\FY1-15\FY1-15_LITHO_TYPE.csv',
+            'path': r'Z:\logging_workspace\姬119H2\姬119H2-测试分类-table2.csv',
             'description': 'FY1-15井岩性类型数据'
         }
     ]
@@ -583,14 +583,12 @@ def user_specific_test():
     for i, test_case in enumerate(test_cases, 1):
         print(f"\n{i}. 测试用例: {test_case['description']}")
         print(f"   文件路径: {test_case['path']}")
-        print(f"   井名: {test_case['well_name']}")
         print("-" * 50)
 
         try:
             # 创建DataTable实例
             test_table = DataTable(
                 path=test_case['path'],
-                well_name=test_case['well_name']
             )
 
             # 执行用户要求的测试序列
