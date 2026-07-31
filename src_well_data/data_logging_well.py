@@ -10,30 +10,40 @@ from src_well_data.data_logging_FMI import DataFMI
 from src_well_data.data_logging_normal import DataLogging
 from src_well_data.data_logging_table import DataTable
 from src_well_data.data_logging_NMR import DataNMR
+from src_well_data.data_logging_core import DataCore
+
 
 class DATA_WELL:
     """
-    井数据统一管理器：
+    井数据统一管理器（Facade 门面模式）：
     - 日常曲线测井数据 DataLogging
     - 电成像 FMI DataFMI
     - 表格类型数据 DataTable
+    - 岩心实验数据 DataCore
     - 未来拓展 NMR 数据
+
+    设计原则：
+    - 惰性加载：各子模块实例在首次访问时才创建，同一路径不重复实例化
+    - 统一访问：通过 get_* 系列方法以相同接口访问不同数据类型
+    - 文件扫描：构造函数自动扫描井目录，识别各类数据文件路径
     """
 
     # =============== 基础初始化 ==================
     def __init__(self, path_folder: str = '', WELL_NAME: str = ''):
 
-        # ---- 数据容器 ----
-        self.logging_dict: Dict[str, DataLogging] = {}
-        self.table_dict: Dict[str, DataTable] = {}
-        self.FMI_dict: Dict[str, DataFMI] = {}
-        self.NMR_dict: Dict[str, Any] = {}
+        # ---- 数据容器（惰性单例模式） ----
+        self.logging_dict: Dict[str, DataLogging] = {}   # 常规测井曲线
+        self.table_dict: Dict[str, DataTable] = {}       # 岩性类型表
+        self.FMI_dict: Dict[str, DataFMI] = {}           # 电成像数据
+        self.NMR_dict: Dict[str, Any] = {}               # 核磁共振数据
+        self.core_dict: Dict[str, DataCore] = {}          # 岩心实验数据
 
-        # ---- 路径容器 ----
+        # ---- 路径容器（由 scan_files() 扫描填充） ----
         self.path_list_logging: List[str] = []
         self.path_list_table: List[str] = []
         self.path_list_fmi: List[str] = []
         self.path_list_nmr: List[str] = []
+        self.path_list_core: List[str] = []             # 岩心实验数据文件路径列表
 
         # 根路径
         self.well_path = path_folder
@@ -49,6 +59,7 @@ class DATA_WELL:
         self.TABLE_KW = ['table', 'LITHO_TYPE']
         self.FMI_KW = ['DYNA', 'STAT']
         self.NMR_KW = ['NMR']
+        self.CORE_KW = ['core']                         # 岩心数据文件关键字（文件名需含 'core'）
 
         # 初始化路径扫描
         self.scan_files()
@@ -62,6 +73,7 @@ class DATA_WELL:
             print(f"[WARN] 路径不存在: {self.well_path}")
             return
 
+        # 常规测井曲线文件（.xlsx / .csv）
         self.path_list_logging = search_files_by_criteria(
             self.well_path,
             name_keywords=self.LOGGING_KW,
@@ -69,6 +81,7 @@ class DATA_WELL:
             all_keywords=False
         )
 
+        # 岩性类型表文件（.xlsx / .csv）
         self.path_list_table = search_files_by_criteria(
             self.well_path,
             name_keywords=self.TABLE_KW,
@@ -76,6 +89,7 @@ class DATA_WELL:
             all_keywords=False
         )
 
+        # 电成像 FMI 文件（.txt）
         self.path_list_fmi = search_files_by_criteria(
             self.well_path,
             name_keywords=self.FMI_KW,
@@ -83,10 +97,19 @@ class DATA_WELL:
             all_keywords=False
         )
 
+        # 核磁共振 NMR 文件（.csv / .txt）
         self.path_list_nmr = search_files_by_criteria(
             self.well_path,
             name_keywords=self.NMR_KW,
             file_extensions=['.csv', '.txt'],
+            all_keywords=False
+        )
+
+        # 岩心实验数据文件（.csv / .xlsx / .txt）
+        self.path_list_core = search_files_by_criteria(
+            self.well_path,
+            name_keywords=self.CORE_KW,
+            file_extensions=['.csv', '.xlsx'],
             all_keywords=False
         )
 
@@ -95,9 +118,13 @@ class DATA_WELL:
     # =========================================================================
     def _get_default_obj(self, data_dict: Dict, key: str = ''):
         """
-        dict 为空 → 返回空
-        key为空  → 返回第一个
-        key匹配  → 返回对应对象
+        字典数据获取辅助函数
+
+        优先级规则：
+        1. dict 为空  → 返回 None
+        2. key 为空    → 返回第一个对象
+        3. key 模糊匹配 → 返回匹配到的第一个对象
+        4. 无匹配       → 返回 None
         """
         if not data_dict:
             print("\033[33m[WARN] 数据未初始化\033[0m")
@@ -106,7 +133,7 @@ class DATA_WELL:
         if not key:
             return next(iter(data_dict.values()))  # 返回第一个对象
 
-        # 支持模糊匹配
+        # 支持模糊匹配（key 是文件名子串即可）
         for k in data_dict.keys():
             if key in k:
                 return data_dict[k]
@@ -118,7 +145,12 @@ class DATA_WELL:
     #                          数据初始化模块
     # =========================================================================
     def init_logging(self, path: str = ''):
-        """初始化普通测井数据"""
+        """
+        初始化常规测井数据对象（惰性单例模式）
+
+        Args:
+            path: 测井数据文件路径，为空时自动取 scan_files() 扫描到的第一个文件
+        """
         if not path:
             if not self.path_list_logging:
                 return
@@ -128,7 +160,12 @@ class DATA_WELL:
             self.logging_dict[path] = DataLogging(path=path, well_name=self.WELL_NAME)
 
     def init_table(self, path: str = ''):
-        """初始化表格数据"""
+        """
+        初始化岩性类型表对象（惰性单例模式）
+
+        Args:
+            path: 类型表文件路径，为空时自动取 scan_files() 扫描到的第一个文件
+        """
         if not path:
             if not self.path_list_table:
                 return
@@ -138,7 +175,12 @@ class DATA_WELL:
             self.table_dict[path] = DataTable(path=path, well_name=self.WELL_NAME)
 
     def init_FMI(self, path: str = ''):
-        """初始化电成像数据（stat/dyna均可）"""
+        """
+        初始化电成像 FMI 数据对象（惰性单例模式）
+
+        Args:
+            path: FMI 文件路径，为空时自动取 scan_files() 扫描到的第一个文件
+        """
         if not path:
             if not self.path_list_fmi:
                 return
@@ -148,14 +190,40 @@ class DATA_WELL:
             self.FMI_dict[path] = DataFMI(path_fmi=path)
 
     def init_NMR(self, path: str = ''):
-        """初始化核磁数据"""
+        """
+        初始化核磁共振 NMR 数据对象（惰性单例模式）
+
+        Args:
+            path: NMR 文件路径，为空时自动取 scan_files() 扫描到的第一个文件
+        """
         if not path:
-            if not self.path_list_fmi:
+            if not self.path_list_nmr:
                 return
-            path = self.path_list_fmi[0]
+            path = self.path_list_nmr[0]
 
         if path not in self.NMR_dict:
             self.NMR_dict[path] = DataNMR(path_nmr=path)
+
+    def init_core(self, path: str = ''):
+        """
+        初始化岩心实验数据对象（惰性单例模式）
+
+        Args:
+            path: 岩心数据文件路径，为空时自动取 scan_files() 扫描到的第一个文件
+
+        Note:
+            - 同一路径不会重复创建实例
+            - 支持 .csv / .xlsx / .txt 三种格式
+            - 文件名需包含 'core' 关键字（由 CORE_KW 控制）
+        """
+        if not path:
+            if not self.path_list_core:
+                print("\033[33m[WARN] 未扫描到岩心数据文件\033[0m")
+                return
+            path = self.path_list_core[0]
+
+        if path not in self.core_dict:
+            self.core_dict[path] = DataCore(path=path, well_name=self.WELL_NAME)
 
     # =========================================================================
     #                          统一访问接口
@@ -165,11 +233,16 @@ class DATA_WELL:
                     norm: bool = False,
                     depth_limit: List[float] = []):
         """
-        获取测井数据 DataFrame
+        获取常规测井数据
 
-        :param key: 文件名或关键字
-        :param curve_names: 需要的曲线列表
-        :param norm: 是否归一化
+        Args:
+            key: 文件路径或关键字，'' → 取第一个扫描到的文件
+            curve_names: 指定要获取的曲线列表，None → 获取所有曲线
+            norm: 是否返回归一化后的数据
+            depth_limit: 深度限制 [min_depth, max_depth]
+
+        Returns:
+            测井数据 DataFrame
         """
         self.init_logging(key)
         obj = self._get_default_obj(self.logging_dict, key)
@@ -187,8 +260,15 @@ class DATA_WELL:
 
     def get_table(self, key: str = '', mode='3', replaced=False, replace_dict=None, new_col='Type_Replaced'):
         """
-        mode='3': depth_start, depth_end, type
-        mode='2': depth, type
+        获取岩性类型表数据
+
+        Args:
+            key: 文件路径或关键字，'' → 取第一个扫描到的文件
+            mode: '3' 返回三列格式 (depth_start, depth_end, type)，
+                  '2' 返回两列格式 (depth, type)
+            replaced: 是否应用类型替换
+            replace_dict: 类型替换字典
+            new_col: 替换后的新列名
         """
         self.init_table(key)
         obj = self._get_default_obj(self.table_dict, key)
@@ -201,7 +281,16 @@ class DATA_WELL:
         return obj.get_table_3() if mode == '3' else obj.get_table_2()
 
     def get_FMI(self, key: str = '', depth: Optional[List[float]] = None):
-        """获得 FMI 电成像数据"""
+        """
+        获取电成像 FMI 数据
+
+        Args:
+            key: 文件路径或关键字，'' → 取第一个扫描到的文件
+            depth: 深度范围 [min_depth, max_depth]，None → 不限制
+
+        Returns:
+            FMI 图像数据（numpy array）和深度数组
+        """
         self.init_FMI(key)
         obj = self._get_default_obj(self.FMI_dict, key)
         if obj is None:
@@ -209,14 +298,51 @@ class DATA_WELL:
         return obj.get_data(depth)
 
     def get_NMR(self, key: str = '', depth: Optional[List[float]] = None):
+        """
+        获取核磁共振 NMR 数据
+
+        Args:
+            key: 文件路径或关键字，'' → 取第一个扫描到的文件
+            depth: 深度范围 [min_depth, max_depth]，None → 不限制
+        """
         self.init_NMR(key)
         obj = self._get_default_obj(self.NMR_dict, key)
         if obj is None:
             return None
         return obj.get_data(depth)
 
+    def get_core(self, key: str = '', curve_names: Optional[List[str]] = None,
+                 depth_range: Optional[List[float]] = None) -> pd.DataFrame:
+        """
+        获取岩心实验数据（DataFrame 格式）
+
+        Args:
+            key: 文件路径或关键字，'' → 取第一个扫描到的岩心文件
+            curve_names: 指定要获取的列名列表，None → 获取所有列
+                       典型列名: ['DEPTH', '石英', '钾长石', '斜长石', '黄铁矿', '黏土矿物']
+            depth_range: 深度范围 [min_depth, max_depth]，None → 不限制
+
+        Returns:
+            包含指定列和深度范围的岩心数据 DataFrame
+
+        Note:
+            - 数据稀疏：深度点不连续，采样间隔约 1m，远大于测井分辨率
+            - 支持多矿物/多组分列同时获取
+        """
+        self.init_core(key)
+        obj = self._get_default_obj(self.core_dict, key)
+        if obj is None:
+            return pd.DataFrame()
+        return obj.get_data(curve_names=curve_names, depth_range=depth_range)
+
     def get_FMI_texture(self, key: str = '', texture_config: Optional[Dict] = None):
-        """获得 FMI 电成像数据的纹理数据"""
+        """
+        获得 FMI 电成像数据的纹理特征数据
+
+        Args:
+            key: 文件路径或关键字
+            texture_config: 纹理计算配置字典
+        """
         self.init_FMI(key)
         obj = self._get_default_obj(self.FMI_dict, key)
         if obj is None:
@@ -224,26 +350,31 @@ class DATA_WELL:
         texture = obj.get_texture(texture_config, fmi_texture_path='')
         return texture
 
-    def get_path_texture_all(self, texture_config):
-        return self.well_path + f'\\{self.WELL_NAME}_texture_logging_{texture_config["windows_length"]}.csv'
-
     def get_FMI_textures(self, texture_config: Optional[Dict] = None, path_config={}):
-        """获得 FMI 电成像数据的纹理数据，这个获取的是动静态成像的纹理特征"""
-        # 计算保存全部纹理数据的路径
-        path_texture_all = self.get_path_texture_all(texture_config)
+        """
+        获取动静态电成像的合并纹理特征数据
 
-        # 如果存在则直接进行计算并保存
+        优先从缓存文件读取；缓存不存在时重新计算并保存
+
+        Args:
+            texture_config: 纹理计算配置（level, distance, angles, windows_length, windows_step）
+            path_config: 路径配置（可选，包含 path_dyna 和 path_stat）
+        """
+        path_texture_all = self.well_path + f'\\{self.WELL_NAME}_texture_logging_{texture_config["windows_length"]}.csv'
+
+        # 缓存命中：直接读取
         if os.path.exists(path_texture_all):
             print('纹理文件已存在，直接进行读取', path_texture_all)
             return pd.read_csv(path_texture_all)
 
-        # 不存在的话，重新计算动静态电成像纹理数据
+        # 缓存未命中：计算动静态纹理并合并
         if 'path_dyna' in path_config:
             path_dyna = path_config['path_dyna']
             if path_dyna not in self.path_list_fmi:
                 raise FileNotFoundError("file {} not found".format(path_dyna))
         else:
             path_dyna = self.search_fmi_path_list(new_kw=[self.FMI_KW[0]])[0]
+
         if 'path_stat' in path_config:
             path_stat = path_config['path_stat']
             if path_stat not in self.path_list_fmi:
@@ -260,7 +391,13 @@ class DATA_WELL:
         return TEXTURE_ALL
 
     def get_FMI_fde(self, key: str = '', fde_config: Optional[Dict] = None):
-        """获得 FMI 电成像数据的fde图谱数据，这个获取指定路径下的电成像数据"""
+        """
+        获取指定 FMI 文件的分形维数谱（FDE）数据
+
+        Args:
+            key: 文件路径或关键字
+            fde_config: FDE 计算配置字典
+        """
         self.init_FMI(key)
         obj = self._get_default_obj(self.FMI_dict, key)
         if obj is None:
@@ -268,21 +405,16 @@ class DATA_WELL:
         fmi_fde = obj.get_fmi_fde(config_fde=fde_config)
         return fmi_fde
 
-    def get_FMI_fdes(self, fde_config: Optional[Dict] = None):
-        """获得 FMI 电成像数据的fde图谱数据，这个获取的是动静态成像的fde数据"""
-        # 不存在的话，重新计算动静态电成像纹理数据
-        path_dyna = self.search_data_path(keywords=[self.FMI_KW[0]], path_list=self.path_list_fmi)
-        path_stat = self.search_data_path(keywords=[self.FMI_KW[1]], path_list=self.path_list_fmi)
-        fde_dyna = self.get_FMI_fde(key=path_dyna, fde_config=fde_config)
-        fde_stat = self.get_FMI_fde(key=path_stat, fde_config=fde_config)
-
-        return fde_dyna, fde_stat
-
-
     # =========================================================================
     #                          数据概览接口
     # =========================================================================
     def well_summary(self) -> Dict[str, Any]:
+        """
+        获取井数据总览信息
+
+        Returns:
+            包含井名、路径、各类文件数量和路径列表的字典
+        """
         return {
             "well": self.WELL_NAME,
             "path": self.well_path,
@@ -290,14 +422,20 @@ class DATA_WELL:
             "paths_fmi": self.path_list_fmi,
             "paths_table": self.path_list_table,
             "paths_nmr": self.path_list_nmr,
+            "paths_core": self.path_list_core,
             "logging_files_num": len(self.path_list_logging),
             "fmi_files_num": len(self.path_list_fmi),
             "table_files_num": len(self.path_list_table),
             "nmr_files_num": len(self.path_list_nmr),
+            "core_files_num": len(self.path_list_core),
         }
 
     def __repr__(self):
-        return f"<DATA_WELL {self.WELL_NAME} | logging={len(self.logging_dict)}, fmi={len(self.FMI_dict)}, table={len(self.table_dict)}>"
+        return (f"<DATA_WELL {self.WELL_NAME} | "
+                f"logging={len(self.logging_dict)}, "
+                f"fmi={len(self.FMI_dict)}, "
+                f"table={len(self.table_dict)}, "
+                f"core={len(self.core_dict)}>")
 
     def combine_logging_table(
             self,
@@ -307,18 +445,31 @@ class DATA_WELL:
             replace_dict=None,
             new_col='Type',
             norm=False,
-            tolerance=0.5,          #
+            tolerance=0.5,
     ):
         """
-        将连续曲线logging与类型表（3列或2列）合并
-        生成 (depth + curves + lithology_label)
-        """
+        将连续曲线 logging 与类型表（3列或2列）合并
 
+        生成 (depth + curves + lithology_label) 格式的 DataFrame，
+        常用于后续的岩性分类或相关性分析
+
+        Args:
+            logging_key: 测井数据文件路径或关键字
+            curve_names_logging: 要保留的曲线列名列表
+            table_key: 类型表文件路径或关键字
+            replace_dict: 类型替换字典
+            new_col: 替换后的新列名
+            norm: 是否对测井曲线归一化
+            tolerance: 深度合并容差（米）
+
+        Returns:
+            合并后的 DataFrame (depth + curves + lithology_label)
+        """
         # 1 获取曲线数据
         df_log = self.get_logging(logging_key, curve_names_logging, norm)
         depth_col = df_log.columns[0]
 
-        # 2 获取 table
+        # 2 获取类型表
         self.init_table(table_key)
         table_obj = self._get_default_obj(self.table_dict, table_key)
 
@@ -343,26 +494,48 @@ class DATA_WELL:
         df_merge[table_columns[-1]] = df_merge[table_columns[-1]].astype(int)
 
         if new_col != '' or new_col is None:
-            ##### 重命名
             df_merge.rename(columns={table_columns[-1]: new_col}, inplace=True)
 
         return df_merge
 
     def get_table_replace_dict(self, table_key=''):
+        """获取类型表的替换字典"""
         self.init_table(table_key)
         table_obj = self._get_default_obj(self.table_dict, table_key)
         return table_obj.get_replace_dict()
 
+    # =========================================================================
+    #                          路径获取接口
+    # =========================================================================
     def get_path_list_logging(self):
+        """获取常规测井数据文件路径列表"""
         return self.path_list_logging
 
     def get_path_list_fmi(self):
+        """获取电成像 FMI 文件路径列表"""
         return self.path_list_fmi
 
+    def get_path_list_nmr(self):
+        return self.path_list_nmr
+
     def get_path_list_table(self):
+        """获取岩性类型表文件路径列表"""
         return self.path_list_table
 
+    def get_path_list_core(self):
+        """获取岩心实验数据文件路径列表"""
+        return self.path_list_core
+
     def search_logging_path_list(self, new_kw=[]):
+        """
+        按关键字精确搜索常规测井文件路径（AND 匹配）
+
+        Args:
+            new_kw: 搜索关键字列表，所有关键字均需出现在文件名中
+
+        Returns:
+            符合条件的文件路径列表
+        """
         path_list_logging = search_files_by_criteria(
             self.well_path,
             name_keywords=new_kw,
@@ -372,6 +545,12 @@ class DATA_WELL:
         return path_list_logging
 
     def search_table_path_list(self, new_kw=[]):
+        """
+        按关键字精确搜索岩性类型表文件路径（AND 匹配）
+
+        Args:
+            new_kw: 搜索关键字列表
+        """
         path_list_table = search_files_by_criteria(
             self.well_path,
             name_keywords=new_kw,
@@ -381,6 +560,12 @@ class DATA_WELL:
         return path_list_table
 
     def search_fmi_path_list(self, new_kw=[]):
+        """
+        按关键字精确搜索 FMI 文件路径（AND 匹配）
+
+        Args:
+            new_kw: 搜索关键字列表
+        """
         path_list_fmi = search_files_by_criteria(
             self.well_path,
             name_keywords=new_kw,
@@ -390,20 +575,59 @@ class DATA_WELL:
         return path_list_fmi
 
     def search_nmr_path_list(self, new_kw=[]):
+        """
+        按关键字精确搜索 NMR 文件路径（AND 匹配）
+
+        Args:
+            new_kw: 搜索关键字列表
+        """
         path_list_nmr = search_files_by_criteria(
             self.well_path,
             name_keywords=new_kw,
-            file_extensions=['.csv'],
+            file_extensions=['.csv', '.txt'],
             all_keywords=True
         )
         return path_list_nmr
 
+    def search_core_path_list(self, new_kw: list = []):
+        """
+        按关键字精确搜索岩心实验数据文件路径（AND 匹配）
+
+        Args:
+            new_kw: 搜索关键字列表，所有关键字均需出现在文件名中
+
+        Returns:
+            符合条件的文件路径列表
+        """
+        path_list_core = search_files_by_criteria(
+            self.well_path,
+            name_keywords=new_kw,
+            file_extensions=['.csv', '.xlsx', '.txt'],
+            all_keywords=True
+        )
+        return path_list_core
+
+    def search_file_path_list(self, new_kw: list = []):
+        """
+
+        """
+        path_list_core = search_files_by_criteria(
+            self.well_path,
+            name_keywords=new_kw,
+            file_extensions=['.csv', '.xlsx', '.txt'],
+            all_keywords=True
+        )
+        return path_list_core
 
 
+# =========================================================================
+#                              测试代码
+# =========================================================================
 if __name__ == '__main__':
     # well = DATA_WELL("F:\logging_workspace\桃镇1H")
     # well = DATA_WELL(r'F:\logging_workspace\禄探')
-    well = DATA_WELL(r'F:\logging_workspace\云安012-X18')
+    # well = DATA_WELL(r'F:\logging_workspace\云安012-X18')
+    well = DATA_WELL(r'Z:\logging_workspace\姬119H2')
 
     summary_temp = well.well_summary()
     for k, val in summary_temp.items():
@@ -414,114 +638,114 @@ if __name__ == '__main__':
 
     path_list_fmi = well.get_path_list_fmi()
     print(path_list_fmi)
-
     path_list_logging = well.get_path_list_logging()
     print(path_list_logging)
 
     path_logging_target = well.search_logging_path_list(new_kw=['120', 'TEXTURE', 'logging'])
-    print(path_logging_target)
+    print("['120', 'TEXTURE', 'logging']:", path_logging_target)
     path_table_target = well.search_table_path_list(new_kw=['table'])
-    print(path_table_target)
-    path_fmi_dyna_target = well.search_fmi_path_list(new_kw=["DYNA"])
-    print(path_fmi_dyna_target)
+    print("['table']:", path_table_target)
+    path_fmi_dyna_target = well.search_fmi_path_list(new_kw=['DYNA'])
+    print("['DYNA']:", path_fmi_dyna_target)
     path_fmi_stat_target = well.search_fmi_path_list(new_kw=['STAT'])
-    print(path_fmi_stat_target)
+    print("['STAT']:", path_fmi_stat_target)
+    path_core_target = well.search_core_path_list(new_kw=['CORE'])
+    print("['CORE']:", path_core_target)
 
 
-    # # well.get_FMI_fdes(fde_config={'windows_length': 160, 'windows_step': 40, 'processing_method': 'original'})
+    # # # well.get_FMI_fdes(fde_config={'windows_length': 160, 'windows_step': 40, 'processing_method': 'original'})
+    # #
+    # # # # texture_dyna = well.get_FMI_texture(key='F:\\logging_workspace\\云安012-X18\\云安012-X18-DYNA.txt', texture_config = {
+    # # # #         'level': 16,  # 灰度级别
+    # # # #         'distance': [2, 4],  # 像素距离
+    # # # #         'angles': [0, np.pi / 2],  # 角度方向
+    # # # #         'windows_length': 80,  # 窗口长度
+    # # # #         'windows_step': 10  # 滑动步长
+    # # # # })
+    # # # # texture_stat = well.get_FMI_texture(key='F:\\logging_workspace\\云安012-X18\\云安012-X18-STAT.txt', texture_config = {
+    # # # #         'level': 16,  # 灰度级别
+    # # # #         'distance': [2, 4],  # 像素距离
+    # # # #         'angles': [0, np.pi / 2],  # 角度方向
+    # # # #         'windows_length': 80,  # 窗口长度
+    # # # #         'windows_step': 10  # 滑动步长
+    # # # # })
+    # # # # print(texture_dyna.describe())
+    # # # # print(texture_stat.describe())
+    # #
+    # # texture_all = well.get_FMI_textures(texture_config={
+    # #         'level': 16,  # 灰度级别
+    # #         'distance': [2, 4],  # 像素距离
+    # #         'angles': [0, np.pi / 2],  # 角度方向
+    # #         'windows_length': 120,  # 窗口长度
+    # #         'windows_step': 10  # 滑动步长
+    # # })
+    # # print(texture_all.describe())
+    # #
+    # # # input_cols = ['AC', 'CAL', 'CNL', 'DEN', 'DTS', 'GR', 'RT', 'RXO']
+    # # # input_cols = ['CON_MEAN_STAT', 'DIS_MEAN_STAT', 'HOM_MEAN_STAT', 'ENG_MEAN_STAT', 'COR_MEAN_STAT', 'ASM_MEAN_STAT', 'ENT_MEAN_STAT', 'CON_SUB_STAT', 'DIS_SUB_STAT', 'HOM_SUB_STAT', 'ENG_SUB_STAT', 'COR_SUB_STAT', 'ASM_SUB_STAT', 'ENT_SUB_STAT', 'CON_X_STAT', 'DIS_X_STAT', 'HOM_X_STAT', 'ENG_X_STAT', 'COR_X_STAT', 'ASM_X_STAT', 'ENT_X_STAT', 'CON_Y_STAT', 'DIS_Y_STAT', 'HOM_Y_STAT', 'ENG_Y_STAT', 'COR_Y_STAT', 'ASM_Y_STAT', 'ENT_Y_STAT']
+    # # # input_cols = ['COR_MEAN_STAT', 'COR_Y_STAT', 'ASM_SUB_STAT', 'HOM_SUB_STAT', 'COR_X_STAT', 'ENG_SUB_STAT', 'ENT_SUB_STAT', 'HOM_X_STAT']
+    # # # input_cols = ['CON_MEAN_DYNA', 'DIS_MEAN_DYNA', 'HOM_MEAN_DYNA', 'ENG_MEAN_DYNA', 'COR_MEAN_DYNA', 'ASM_MEAN_DYNA', 'ENT_MEAN_DYNA', 'CON_SUB_DYNA', 'DIS_SUB_DYNA', 'HOM_SUB_DYNA', 'ENG_SUB_DYNA', 'COR_SUB_DYNA', 'ASM_SUB_DYNA', 'ENT_SUB_DYNA', 'CON_X_DYNA', 'DIS_X_DYNA', 'HOM_X_DYNA', 'ENG_X_DYNA', 'COR_X_DYNA', 'ASM_X_DYNA', 'ENT_X_DYNA', 'CON_Y_DYNA', 'DIS_Y_DYNA', 'HOM_Y_DYNA', 'ENG_Y_DYNA', 'COR_Y_DYNA', 'ASM_Y_DYNA', 'ENT_Y_DYNA']
+    # # # input_cols = ['ENT_SUB_DYNA', 'HOM_X_DYNA', 'ENG_SUB_DYNA', 'HOM_SUB_DYNA', 'ASM_SUB_DYNA', 'CON_SUB_DYNA', 'CON_X_DYNA', 'DIS_SUB_DYNA']
+    # input_cols = ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'TEXTURE_LEVEL']
     #
-    # # # texture_dyna = well.get_FMI_texture(key='F:\\logging_workspace\\云安012-X18\\云安012-X18-DYNA.txt', texture_config = {
-    # # #         'level': 16,  # 灰度级别
-    # # #         'distance': [2, 4],  # 像素距离
-    # # #         'angles': [0, np.pi / 2],  # 角度方向
-    # # #         'windows_length': 80,  # 窗口长度
-    # # #         'windows_step': 10  # 滑动步长
+    # # target_col = 'Type'
+    # # logging_data_temp_type = well.combine_logging_table(
+    # #         logging_key=path_logging_target[0],
+    # #         curve_names_logging=input_cols,
+    # #         table_key=path_table_target[0],
+    # #         replace_dict={},
+    # #         new_col=target_col,
+    # #         norm=False,
+    # # )
+    # # print(list(logging_data_temp_type.columns))
+    # # print(logging_data_temp_type.describe())
+    # logging_data_temp_type = well.get_logging(key=path_logging_target[0], curve_names=input_cols)
+    # print('form path {} read data :{}'.format(path_logging_target[0], logging_data_temp_type.columns))
     #
-    # # # })
-    # # # texture_stat = well.get_FMI_texture(key='F:\\logging_workspace\\云安012-X18\\云安012-X18-STAT.txt', texture_config = {
-    # # #         'level': 16,  # 灰度级别
-    # # #         'distance': [2, 4],  # 像素距离
-    # # #         'angles': [0, np.pi / 2],  # 角度方向
-    # # #         'windows_length': 80,  # 窗口长度
-    # # #         'windows_step': 10  # 滑动步长
-    # # # })
-    # # # print(texture_dyna.describe())
-    # # # print(texture_stat.describe())
+    # # 创建模型实例
+    # model = MultiVariateLinearRegressor(fit_intercept=True)
+    # # # 训练模型（使用x1, x2, x3预测y1, y2）
+    # # model.fit(logging_data_temp_type, x_cols=['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT'], y_cols=['Type'])
+    # coef_matrix = np.array([-2.82736617, 1.65717694, -1.32970234, -15.03774471]).reshape((1, 4))
+    # intercept_matrix = np.array([2.08278412]).reshape((1, 1))
+    # print('intercept_matrix is :', intercept_matrix.shape, 'coef_matrix is :', coef_matrix.shape)
+    # model.set_fit_paras(x_cols=['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT'], y_cols=['Type'], intercept_matrix=intercept_matrix, coef_matrix=coef_matrix)
+    # ############## 进行预测
+    # logging_data_temp_type.loc[:, 'TEXTURE_LEVEL'] = model.predict(logging_data_temp_type)
     #
-    # texture_all = well.get_FMI_textures(texture_config={
-    #         'level': 16,  # 灰度级别
-    #         'distance': [2, 4],  # 像素距离
-    #         'angles': [0, np.pi / 2],  # 角度方向
-    #         'windows_length': 120,  # 窗口长度
-    #         'windows_step': 10  # 滑动步长
-    # })
-    # print(texture_all.describe())
+    # def classify_texture(value):
+    #     if value < 1.0:
+    #         return 0
+    #     elif 1.0 <= value < 1.3:
+    #         return 1
+    #     elif 1.5 <= value < 1.78:
+    #         return 2
+    #     else:
+    #         return 3
+    # logging_data_temp_type['TYPE_PRED'] = logging_data_temp_type['TEXTURE_LEVEL'].apply(classify_texture)
     #
-    # # input_cols = ['AC', 'CAL', 'CNL', 'DEN', 'DTS', 'GR', 'RT', 'RXO']
-    # # input_cols = ['CON_MEAN_STAT', 'DIS_MEAN_STAT', 'HOM_MEAN_STAT', 'ENG_MEAN_STAT', 'COR_MEAN_STAT', 'ASM_MEAN_STAT', 'ENT_MEAN_STAT', 'CON_SUB_STAT', 'DIS_SUB_STAT', 'HOM_SUB_STAT', 'ENG_SUB_STAT', 'COR_SUB_STAT', 'ASM_SUB_STAT', 'ENT_SUB_STAT', 'CON_X_STAT', 'DIS_X_STAT', 'HOM_X_STAT', 'ENG_X_STAT', 'COR_X_STAT', 'ASM_X_STAT', 'ENT_X_STAT', 'CON_Y_STAT', 'DIS_Y_STAT', 'HOM_Y_STAT', 'ENG_Y_STAT', 'COR_Y_STAT', 'ASM_Y_STAT', 'ENT_Y_STAT']
-    # # input_cols = ['COR_MEAN_STAT', 'COR_Y_STAT', 'ASM_SUB_STAT', 'HOM_SUB_STAT', 'COR_X_STAT', 'ENG_SUB_STAT', 'ENT_SUB_STAT', 'HOM_X_STAT']
-    # # input_cols = ['CON_MEAN_DYNA', 'DIS_MEAN_DYNA', 'HOM_MEAN_DYNA', 'ENG_MEAN_DYNA', 'COR_MEAN_DYNA', 'ASM_MEAN_DYNA', 'ENT_MEAN_DYNA', 'CON_SUB_DYNA', 'DIS_SUB_DYNA', 'HOM_SUB_DYNA', 'ENG_SUB_DYNA', 'COR_SUB_DYNA', 'ASM_SUB_DYNA', 'ENT_SUB_DYNA', 'CON_X_DYNA', 'DIS_X_DYNA', 'HOM_X_DYNA', 'ENG_X_DYNA', 'COR_X_DYNA', 'ASM_X_DYNA', 'ENT_X_DYNA', 'CON_Y_DYNA', 'DIS_Y_DYNA', 'HOM_Y_DYNA', 'ENG_Y_DYNA', 'COR_Y_DYNA', 'ASM_Y_DYNA', 'ENT_Y_DYNA']
-    # # input_cols = ['ENT_SUB_DYNA', 'HOM_X_DYNA', 'ENG_SUB_DYNA', 'HOM_SUB_DYNA', 'ASM_SUB_DYNA', 'CON_SUB_DYNA', 'CON_X_DYNA', 'DIS_SUB_DYNA']
-    input_cols = ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'TEXTURE_LEVEL']
-
-    # target_col = 'Type'
-    # logging_data_temp_type = well.combine_logging_table(
-    #         logging_key=path_logging_target[0],
-    #         curve_names_logging=input_cols,
-    #         table_key=path_table_target[0],
-    #         replace_dict={},
-    #         new_col=target_col,
-    #         norm=False,
-    # )
-    # print(list(logging_data_temp_type.columns))
-    # print(logging_data_temp_type.describe())
-    logging_data_temp_type = well.get_logging(key=path_logging_target[0], curve_names=input_cols)
-    print('form path {} read data :{}'.format(path_logging_target[0], logging_data_temp_type.columns))
-
-    # 创建模型实例
-    model = MultiVariateLinearRegressor(fit_intercept=True)
-    # # 训练模型（使用x1, x2, x3预测y1, y2）
-    # model.fit(logging_data_temp_type, x_cols=['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT'], y_cols=['Type'])
-    coef_matrix = np.array([-2.82736617, 1.65717694, -1.32970234, -15.03774471]).reshape((1, 4))
-    intercept_matrix = np.array([2.08278412]).reshape((1, 1))
-    print('intercept_matrix is :', intercept_matrix.shape, 'coef_matrix is :', coef_matrix.shape)
-    model.set_fit_paras(x_cols=['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT'], y_cols=['Type'], intercept_matrix=intercept_matrix, coef_matrix=coef_matrix)
-    ############## 进行预测
-    logging_data_temp_type.loc[:, 'TEXTURE_LEVEL'] = model.predict(logging_data_temp_type)
-
-    def classify_texture(value):
-        if value < 1.0:
-            return 0
-        elif 1.0 <= value < 1.3:
-            return 1
-        elif 1.5 <= value < 1.78:
-            return 2
-        else:
-            return 3
-    logging_data_temp_type['TYPE_PRED'] = logging_data_temp_type['TEXTURE_LEVEL'].apply(classify_texture)
-
-    # logging_data_temp_type.to_csv(well.well_path+'\\'+well.WELL_NAME+'_result.csv', index=False)
-
-    # ############## 计算评估指标
-    # test_metrics = model.score(logging_data_temp_type)
-    # print(type(model.coef_matrix), type(model.intercept_matrix), model.coef_matrix.shape, model.intercept_matrix.shape, model.coef_matrix, model.intercept_matrix)
-
-    # pearson_result, pearson_sorted, rf_result, rf_sorted = feature_influence_analysis(
-    #     df_input=logging_data_temp_type,
-    #     input_cols=input_cols,
-    #     target_col=target_col,
-    #     regressor_use=False,
-    #     replace_dict={},
-    # )
-    # print("\n按皮尔逊系数排序的属性:", pearson_sorted)
-    # print("\n按随机森林特征重要性排序的属性:", rf_sorted)
-
-    # # 按组抽稀，每个组保留50%的数据
-    # logging_data_dilute = dilute_dataframe(logging_data_temp_type, ratio=5, method='random', group_by=target_col)
-    # print(f"按组抽稀50%后形状: {logging_data_dilute.shape}")
-    # plot_matrxi_scatter(logging_data_dilute, ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'CON_X_DYNA', 'CON_SUB_DYNA', 'COR_MEAN_STAT'], target_col, target_col_dict={})
-
-    depth_config = [logging_data_temp_type['DEPTH'].min(), logging_data_temp_type['DEPTH'].max()]
-    fmi_dynamic, depth_dyna = well.get_FMI(key=path_fmi_dyna_target[0], depth=depth_config)
-    fmi_static, depth_stat = well.get_FMI(key=path_fmi_stat_target[0], depth=depth_config)
-    print('fmi depth from {} to {}, and fmi data shape is :{}'.format(depth_dyna[0,], depth_dyna[-1], fmi_static.shape))
+    # # logging_data_temp_type.to_csv(well.well_path+'\\'+well.WELL_NAME+'_result.csv', index=False)
+    #
+    # # ############## 计算评估指标
+    # # test_metrics = model.score(logging_data_temp_type)
+    # # print(type(model.coef_matrix), type(model.intercept_matrix), model.coef_matrix.shape, model.intercept_matrix.shape, model.coef_matrix, model.intercept_matrix)
+    #
+    # # pearson_result, pearson_sorted, rf_result, rf_sorted = feature_influence_analysis(
+    # #     df_input=logging_data_temp_type,
+    # #     input_cols=input_cols,
+    # #     target_col=target_col,
+    # #     regressor_use=False,
+    # #     replace_dict={},
+    # # )
+    # # print("\n按皮尔逊系数排序的属性:", pearson_sorted)
+    # # print("\n按随机森林特征重要性排序的属性:", rf_sorted)
+    #
+    # # # 按组抽稀，每个组保留50%的数据
+    # # logging_data_dilute = dilute_dataframe(logging_data_temp_type, ratio=5, method='random', group_by=target_col)
+    # # print(f"按组抽稀50%后形状: {logging_data_dilute.shape}")
+    # # plot_matrxi_scatter(logging_data_dilute, ['HOM_X_STAT', 'HOM_X_DYNA', 'ENT_SUB_DYNA', 'ASM_SUB_STAT', 'CON_X_DYNA', 'CON_SUB_DYNA', 'COR_MEAN_STAT'], target_col, target_col_dict={})
+    #
+    # depth_config = [logging_data_temp_type['DEPTH'].min(), logging_data_temp_type['DEPTH'].max()]
+    # fmi_dynamic, depth_dyna = well.get_FMI(key=path_fmi_dyna_target[0], depth=depth_config)
+    # fmi_static, depth_stat = well.get_FMI(key=path_fmi_stat_target[0], depth=depth_config)
+    # print('fmi depth from {} to {}, and fmi data shape is :{}'.format(depth_dyna[0,], depth_dyna[-1], fmi_static.shape))
