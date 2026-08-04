@@ -141,6 +141,25 @@ class DATA_WELL:
         # 完全匹配失败
         return None
 
+
+    def search_file_path_list(self, name_keywords=[], file_extensions=['.csv', '.xlsx', '.txt']):
+        """
+        按关键字精确搜索常规测井文件路径（AND 匹配）
+
+        Args:
+            name_keywords: 搜索关键字列表，所有关键字均需出现在文件名中
+
+        Returns:
+            符合条件的文件路径列表
+        """
+        path_list_logging = search_files_by_criteria(
+            self.well_path,
+            name_keywords=name_keywords,
+            file_extensions=file_extensions,
+            all_keywords=True
+        )
+        return path_list_logging
+
     # =========================================================================
     #                          数据初始化模块
     # =========================================================================
@@ -386,7 +405,7 @@ class DATA_WELL:
         texture_stat = self.get_FMI_texture(key=path_stat, texture_config=texture_config)
 
         TEXTURE_ALL = pd.concat([texture_stat, texture_dyna.iloc[:, 1:]], axis=1)
-        print(path_texture_all)
+        print('saving all textures to file:', path_texture_all)
         TEXTURE_ALL.to_csv(path_texture_all, index=False)
         return TEXTURE_ALL
 
@@ -457,6 +476,9 @@ class DATA_WELL:
                 f"table={len(self.table_dict)}, "
                 f"core={len(self.core_dict)}>")
 
+    # =========================================================================
+    #                          数据综合获取函数
+    # =========================================================================
     def combine_logging_table(
             self,
             logging_key='',
@@ -465,7 +487,6 @@ class DATA_WELL:
             replace_dict=None,
             new_col='Type',
             norm=False,
-            tolerance=0,
             depth_limit: Optional[List[float]] = None,
     ):
         """
@@ -512,7 +533,7 @@ class DATA_WELL:
         table_columns = list(df_tab.columns)
         array_logging = df_log.values.astype(np.float32)
         array_table = df_tab.values.astype(np.float32)
-        array_merge = combine_logging_table(array_logging, array_table, drop=True, tolerance=tolerance)
+        array_merge = combine_logging_table(array_logging, array_table, drop=False, tolerance=table_obj._table_resolution+0.001)
 
         data_columns = logging_columns + [table_columns[-1]]
         df_merge = pd.DataFrame(array_merge, columns=data_columns)
@@ -686,8 +707,7 @@ class DATA_WELL:
                 replace_dict=replace_dict,
                 new_col=new_col,
                 norm=norm,
-                tolerance=tolerance,
-                depth_limit=depth_limit
+                depth_limit=depth_limit,
             )
 
         # =================================================================
@@ -722,52 +742,16 @@ class DATA_WELL:
 
         return df_current
 
-
+    # =========================================================================
+    #                          表格数据的replace_dict获取
+    # =========================================================================
     def get_table_replace_dict(self, table_key=''):
         """获取类型表的替换字典"""
         self.init_table(table_key)
         table_obj = self._get_default_obj(self.table_dict, table_key)
         return table_obj.get_replace_dict()
 
-    # =========================================================================
-    #                          路径获取接口
-    # =========================================================================
-    def get_path_list_logging(self):
-        """获取常规测井数据文件路径列表"""
-        return self.path_list_logging
 
-    def get_path_list_fmi(self):
-        """获取电成像 FMI 文件路径列表"""
-        return self.path_list_fmi
-
-    def get_path_list_nmr(self):
-        return self.path_list_nmr
-
-    def get_path_list_table(self):
-        """获取岩性类型表文件路径列表"""
-        return self.path_list_table
-
-    def get_path_list_core(self):
-        """获取岩心实验数据文件路径列表"""
-        return self.path_list_core
-
-    def search_file_path_list(self, name_keywords=[], file_extensions=['.csv', '.xlsx', '.txt']):
-        """
-        按关键字精确搜索常规测井文件路径（AND 匹配）
-
-        Args:
-            name_keywords: 搜索关键字列表，所有关键字均需出现在文件名中
-
-        Returns:
-            符合条件的文件路径列表
-        """
-        path_list_logging = search_files_by_criteria(
-            self.well_path,
-            name_keywords=name_keywords,
-            file_extensions=file_extensions,
-            all_keywords=True
-        )
-        return path_list_logging
 
 
 
@@ -848,6 +832,7 @@ if __name__ == '__main__':
         print(f"  Shape: {df_merged_tab.shape}")
         print(f"  Columns: {list(df_merged_tab.columns)}")
         print("  Head:\n" + df_merged_tab.head(5).to_string())
+        print("  Describe:\n" + df_merged_tab.describe().to_string())
     except Exception as e:
         print(f"  FAIL: {e}")
 
@@ -862,7 +847,7 @@ if __name__ == '__main__':
             logging_key=p_logging[0] if p_logging else '',
             curve_names_logging=['#DEPTH', 'GR', 'DEN', 'CNL'],
             core_key=p_core[0] if p_core else '',
-            depth_limit=[2726, 2760],
+            # depth_limit=[2726, 2760],
             tolerance=0.5,
         )
         print(f"  Shape: {df_merged_core.shape}")
@@ -871,6 +856,7 @@ if __name__ == '__main__':
         print(f"  有矿物数据的行: {len(matched)} / {len(df_merged_core)}")
         print("  矿物数据示例:")
         print(matched[['#DEPTH', 'GR', '石英', '钾长石', '黄铁矿']].head(5).to_string(index=False))
+        print("  Describe:\n" + df_merged_core.describe().to_string())
     except Exception as e:
         print(f"  FAIL: {e}")
 
@@ -883,10 +869,12 @@ if __name__ == '__main__':
     df_log_table_core = well.combine_logging_table_core(
         logging_key=p_logging[0] if p_logging else '',
         curve_names_logging=['#DEPTH', 'GR', 'DEN'],
-        depth_limit=[2730, 2745],
+        # depth_limit=[2730, 2745],
         table_key=p_table[0],
         core_key=p_core[0],
         tolerance=0
     )
-    print(f"  Shape: {df_log_table_core.dropna().shape}")
-    print(df_log_table_core.dropna().head(3).to_string())
+    df_log_table_core_dropna = df_log_table_core.dropna()
+    print(f"  Shape: {df_log_table_core_dropna.shape}")
+    print(df_log_table_core_dropna.head(9).to_string())
+    print(df_log_table_core_dropna.describe().to_string())
